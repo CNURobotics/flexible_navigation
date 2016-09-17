@@ -1,0 +1,6 @@
+path: flex_nav_flexbe_states.pure_pursuit_state
+class: PurePursuitState
+
+import_only: true
+
+outcome: done

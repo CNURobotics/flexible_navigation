@@ -1,0 +1,7 @@
+path: flex_nav_flexbe_states.set_indice_state
+class: SetIndiceState
+
+import_only: true
+
+outcome: done
+

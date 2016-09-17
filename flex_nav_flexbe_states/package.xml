@@ -1,0 +1,20 @@
+<package>
+	<name>flex_nav_flexbe_states</name>
+	<version>0.1.0</version>
+	<description>
+		 flex_nav_flexbe_states provides a collection of FlexBE states used during the SSP Research
+	</description>
+	<maintainer email="justin.willis.13@cnu.edu">Justin Willis</maintainer>
+	<license>ISC</license>
+
+	<url>http://ros.org/wiki/flexbe_states</url>
+	<author>Justin Willis</author>
+
+	<buildtool_depend>catkin</buildtool_depend>
+
+	<run_depend>rospy</run_depend>
+	<run_depend>geometry_msgs</run_depend>
+	<run_depend>flexbe_msgs</run_depend>
+	<run_depend>flexbe_core</run_depend>
+
+</package>

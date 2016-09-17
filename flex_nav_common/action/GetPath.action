@@ -1,0 +1,11 @@
+geometry_msgs/PoseStamped pose
+---
+uint8 SUCCESS=0
+uint8 EMPTY=1
+uint8 FAILURE=2
+
+uint8                     code
+nav_msgs/Path             plan
+---
+geometry_msgs/Pose        location
+geometry_msgs/Pose        goal
