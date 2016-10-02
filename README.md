@@ -1,16 +1,17 @@
 Flexible Navigation
 ===================
 
-Flexible Navigation is a modular rework of the ROS Navigation stack that allows
-a user to graphically chain together states in a state machine to essentially
-create their own navigation stack to suit any need.
+Flexible Navigation is a rework of the ROS Navigation stack into independent modules that
+interface with [FlexBE] compatible state implementations.  These allow a user to graphically chain together states in a state machine to essentially create their own navigation stack to suit any need.
+
+This allows for supervisory and sliding autonomy within navigation, and better control over contingencies and recovery behaviors.
 
 About
 -----
 
 This system provides specific navigation planning and path following
 capabilities based on the ROS Navigation [move_base] packages and is compatible
-with base_global_planner and base_local_planner.
+with any base_global_planner and base_local_planner plugin.
 
 A ROS node wrapper for each plugin type provides several ActionLib
 interfaces to [FlexBE] state implementations.
@@ -18,8 +19,10 @@ interfaces to [FlexBE] state implementations.
 Install
 -------
 
-The Flexible Navigation system uses the latest version of ROS Kinetic. You
-should first follow the [install guide] and get that set up before proceeding.
+A complete demonstration system is provided as part of the CHRISLab [Create Flexible Navigation] demonstration. Follow setup and operation directions there for an integrated demonstration.  The complete system is easily setup and built by following the installation directions at [CHRISLab Install].
+
+The Flexible Navigation system has been tested using the latest version of ROS Kinetic. You
+should first follow the [ROS Install Guide] and get that set up before proceeding.
 
 License
 -------
@@ -57,6 +60,8 @@ License
 	     WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 	     POSSIBILITY OF SUCH DAMAGE.
 
-[FlexBE]: flexbe.github.io
+[FlexBE]: https://flexbe.github.io
 [move_base]: http://wiki.ros.org/move_base
-[install guide]: http://wiki.ros.org/kinetic/Installation
+[ROS Install Guide]: http://wiki.ros.org/kinetic/Installation
+[Create Flexible Navigation]: https://github.com/CNURobotics/chris_create_flexible_navigation
+[CHRISLab Install]: https://github.com/CNURobotics/chris_install
