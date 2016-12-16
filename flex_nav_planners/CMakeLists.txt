@@ -37,6 +37,7 @@ add_executable(${PROJECT_NAME}_follow_path_node
 	src/follow_path.cpp
 	src/follow_common.cpp
 )
+add_dependencies(${PROJECT_NAME}_follow_path_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_follow_path_node
 	${Boost_LIBRARIES}
 	${catkin_LIBRARIES}
@@ -48,6 +49,7 @@ add_executable(${PROJECT_NAME}_follow_topic_node
 	src/follow_topic.cpp
 	src/follow_common.cpp
 )
+add_dependencies(${PROJECT_NAME}_follow_topic_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_follow_topic_node
 	${Boost_LIBRARIES}
 	${catkin_LIBRARIES}
@@ -58,6 +60,7 @@ add_executable(${PROJECT_NAME}_get_path_node
 	src/get_path_node.cpp
 	src/get_path.cpp
 )
+add_dependencies(${PROJECT_NAME}_get_path_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_get_path_node
 	${Boost_LIBRARIES}
 	${catkin_LIBRARIES}
