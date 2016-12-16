@@ -1,0 +1,28 @@
+<package>
+  <name>flexible_navigation</name>
+  <version>0.0.1</version>
+  <description>
+    Flexible Navigation is a rework of the ROS Navigation stack into independent modules that
+    interface with FlexBE (http://wiki.ros.org/flexbe) compatible state implementations.
+
+    These allow a user to graphically chain together states in a state machine to essentially create their own navigation stack to suit any need.
+
+    This allows for supervisory and sliding autonomy within navigation, and better control over contingencies and recovery behaviors.
+  </description>
+	<maintainer email="david.conner@cnu.edu">Dr. David Conner</maintainer>
+	<license>BSD</license>
+  <url type="website">http://ros.org/wiki/flexible_navigation</url>
+  <url type="repository">https://github.com/CNURobotics/flexible_navigation</url>
+  <url type="bugtracker">https://github.com/CNURobotics/flexible_navigation/issues</url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <run_depend>flex_nav_common</run_depend>
+  <run_depend>flex_nav_flexbe_states</run_depend>
+  <run_depend>flex_nav_controllers</run_depend>
+  <run_depend>flex_nav_planners</run_depend>
+
+  <export>
+    <metapackage/>
+  </export>
+</package>
