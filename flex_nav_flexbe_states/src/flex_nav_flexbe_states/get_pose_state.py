@@ -46,17 +46,19 @@ class GetPoseState(EventState):
     """
     Grabs the most recent published PoseStamped.
 
-    #> goal     PointStamped    The goal.
+    -- topic    String           The topic to subscribe to
+
+    #> goal     PointStamped     The goal.
 
     <= done     Goal PoseStamped is available.
 
     """
 
-    def __init__(self):
+    def __init__(self, topic = 'move_base_simple/goal'):
         """Constructor"""
         super(GetPoseState, self).__init__(outcomes=['done'], output_keys=['goal'])
 
-        self._topic = '/move_base_simple/goal'
+        self._topic = topic
         self._sub = ProxySubscriberCached({self._topic: PoseStamped})
         self._goal_pose = None
 
