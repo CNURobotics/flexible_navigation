@@ -12,7 +12,6 @@ from flexbe_core.proxy import ProxyServiceCaller
 from flexbe_core.proxy import ProxyActionClient
 
 from flex_nav_common.msg import *
-from chris_create_node.msg import CreateSensorState
 
 class ClearCostmapsState(EventState):
 
