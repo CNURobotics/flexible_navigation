@@ -19,7 +19,9 @@ interfaces to [FlexBE] state implementations.
 Install
 -------
 
-A complete demonstration system is provided as part of the CHRISLab [Create Flexible Navigation] demonstration. Follow setup and operation directions there for an integrated demonstration.  The complete system is easily setup and built by following the installation directions at [CHRISLab Install].
+A complete demonstration system is provided as part of the CHRISLab [Turtlebot Flexible Navigation] demonstration. Follow setup and operation directions there for an integrated demonstration.  The complete system is easily setup and built by following the installation directions at [CHRISLab Install].
+
+The [Turtlebot Flexible Navigation] demonstration uses the SBPL lattice planner in a move_base like planning scheme.  An alternative demonstration at [Create Flexible Navigation] uses a three layer planning scheme to demonstrate the flexibility of the decoupled approach.
 
 The Flexible Navigation system has been tested using the latest version of ROS Kinetic. You
 should first follow the [ROS Install Guide] and get that set up before proceeding.
@@ -27,7 +29,7 @@ should first follow the [ROS Install Guide] and get that set up before proceedin
 License
 -------
 
-	Copyright (c) 2016
+	Copyright (c) 2016-2017
 	Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 	Christopher Newport University
 
@@ -63,5 +65,6 @@ License
 [FlexBE]: https://flexbe.github.io
 [move_base]: http://wiki.ros.org/move_base
 [ROS Install Guide]: http://wiki.ros.org/kinetic/Installation
+[Turtlebot Flexible Navigation]: https://github.com/CNURobotics/chris_turtlebot_flexible_navigation
 [Create Flexible Navigation]: https://github.com/CNURobotics/chris_create_flexible_navigation
 [CHRISLab Install]: https://github.com/CNURobotics/chris_install
