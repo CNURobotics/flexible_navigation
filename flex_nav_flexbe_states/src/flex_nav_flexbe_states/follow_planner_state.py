@@ -75,16 +75,16 @@ class FollowPlannerState(EventState):
         if self._client.has_result(self._action_topic):
             result = self._client.get_result(self._action_topic)
             if result.code == 0:
-                Logger.loginfo('[%s]: Planning Success!' % self.name)
+                Logger.loginfo('%s   Planning Success!' % (self.name))
                 return 'done'
             elif result.code == 1:
-                Logger.logerr('[%s]: Failure' % self.name)
+                Logger.logerr('%s   Failure' % (self.name))
                 return 'failed'
             elif result.code == 2:
-                Logger.logerr('[%s]: Preempted' % self.name)
+                Logger.logerr('%s   Preempted' % (self.name))
                 return 'preempted'
             else:
-                Logger.logerr('[%s]: Unknown error' % self.name)
+                Logger.logerr('%s   Unknown error' % (self.name))
                 return 'failed'
 
 
@@ -96,10 +96,10 @@ class FollowPlannerState(EventState):
         result = FollowPathGoal(path = userdata.plan)
 
         try:
-            Logger.loginfo('[%s]: Following the path to victory!' % self.name)
+            Logger.loginfo('%s   Following the path to victory!' % (self.name))
             self._client.send_goal(self._action_topic, result)
         except Exception as e:
-            Logger.logwarn('[%s]: Failed to follow path: %s' % (self.name, str(e)))
+            Logger.logwarn('%s   Failed to follow path: %s' % (self.name, str(e)))
             return 'failed'
 
     def on_exit(self, userdata):
@@ -107,5 +107,5 @@ class FollowPlannerState(EventState):
             ProxyActionClient._result[self._action_topic] = None
 
         if self._client.is_active(self._action_topic):
-            Logger.logerr('[%s]: Canceling active goal' % self.name)
+            Logger.logerr('%s   Canceling active goal' % (self.name))
             self._client.cancel(self._action_topic)

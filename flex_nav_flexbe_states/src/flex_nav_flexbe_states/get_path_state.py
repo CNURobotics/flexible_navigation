@@ -76,19 +76,19 @@ class GetPathState(EventState):
         if self._client.has_result(self._action_topic):
             result = self._client.get_result(self._action_topic)
             if result.code == 0:
-                Logger.loginfo('[%s]: Got a plan!' % self.name)
+                Logger.loginfo('%s  Got a plan!' % (self.name))
                 userdata.plan = result.plan
                 return 'planned'
             elif result.code == 1:
-                Logger.logerr('[%s]: Received an empty plan' % self.name)
+                Logger.logerr('%s    Received an empty plan' % (self.name))
                 userdata.plan = None
                 return 'empty'
             elif result.code == 2:
-                Logger.logerr('[%s]: Failed to create a plan' % self.name)
+                Logger.logerr('%s    Failed to create a plan' % (self.name))
                 userdata.plan = None
                 return 'failed'
             else:
-                Logger.logerr('[%s]: Unknown error' % self.name)
+                Logger.logerr('%s    Unknown error' % (self.name))
                 userdata.plan = None
                 return 'failed'
 
@@ -99,10 +99,10 @@ class GetPathState(EventState):
         result = GetPathGoal(pose = userdata.goal)
 
         try:
-            Logger.loginfo('[%s]: Requesting a plan' % self.name)
+            Logger.loginfo('%s    Requesting a plan' % (self.name))
             self._client.send_goal(self._action_topic, result)
         except Exception as e:
-            Logger.logwarn('[%s]: Failed to send plan request: %s' % (self.name, str(e)))
+            Logger.logwarn('%s    Failed to send plan request: %s' % (self.name, str(e)))
             userdata.plan = None
             return 'failed'
 
@@ -111,5 +111,5 @@ class GetPathState(EventState):
             ProxyActionClient._result[self._action_topic] = None
 
         if self._client.is_active(self._action_topic):
-            Logger.logerr('[%s]: Canceling active goal' % self.name)
+            Logger.logerr('%s    Canceling active goal' % (self.name) )
             self._client.cancel(self._action_topic)

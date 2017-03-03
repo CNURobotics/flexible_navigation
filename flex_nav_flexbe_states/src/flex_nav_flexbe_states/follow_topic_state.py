@@ -76,16 +76,16 @@ class FollowTopicState(EventState):
         if self._client.has_result(self._controller_topic):
             result = self._client.get_result(self._controller_topic)
             if result.code == 0:
-                Logger.loginfo('[%s]: Success!' % self.name)
+                Logger.loginfo('%s  Success!' % (self.name))
                 return 'done'
             elif result.code == 1:
-                Logger.logerr('[%s]: Failure' % self.name)
+                Logger.logerr('%s  Failure' % (self.name))
                 return 'failed'
             elif result.code == 2:
-                Logger.logerr('[%s]: Preempted' % self.name)
+                Logger.logerr('%s  Preempted' % (self.name))
                 return 'preempted'
             else:
-                Logger.logerr('[%s]: Unknown error' % self.name)
+                Logger.logerr('%s  Unknown error' % (self.name))
                 return 'failed'
 
     def on_enter(self, userdata):
@@ -97,10 +97,10 @@ class FollowTopicState(EventState):
         result = FollowTopicGoal(topic = topic)
 
         try:
-            Logger.loginfo('[%s]: Listening to topic: %s' %  (self.name, self._planner_topic))
+            Logger.loginfo('[%s] - Listening to topic: %s' %  (self.name, self._planner_topic))
             self._client.send_goal(self._controller_topic, result)
         except Exception as e:
-            Logger.logwarn('[%s]: Failed to listen to topic: %s' % str(e))
+            Logger.logwarn('[%s] - Failed to listen to topic: %s' % str(e))
             return 'failed'
 
     def on_exit(self, userdata):
@@ -108,5 +108,5 @@ class FollowTopicState(EventState):
             ProxyActionClient._result[self._controller_topic] = None
 
         if self._client.is_active(self._controller_topic):
-            Logger.logerr('[%s]: Canceling active goal' % self.name)
+            Logger.logerr('%s  Canceling active goal' % (self.name))
             self._client.cancel(self._controller_topic)

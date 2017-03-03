@@ -64,7 +64,7 @@ class GetPoseState(EventState):
 
     def execute(self, userdata):
         if self._sub.has_msg(self._topic):
-            Logger.loginfo('[%s]: Received new goal' % self.name)
+            Logger.loginfo('%s  Received new goal' % (self.name))
             self._goal_pose = self._sub.get_last_msg(self._topic)
             self._sub.remove_last_msg(self._topic)
 
@@ -76,6 +76,6 @@ class GetPoseState(EventState):
         userdata.goal = None
         self._goal_pose = None
         if self._sub.has_msg(self._topic):
-            Logger.loginfo('[%s]: Clearing prior goal' % self.name)
+            Logger.loginfo('%s  Clearing prior goal' % (self.name))
             self._sub.remove_last_msg(self._topic)
-        Logger.loginfo('[%s]: Input new goal ...' % self.name)
+        Logger.loginfo('%s Input new goal ' % (self.name))

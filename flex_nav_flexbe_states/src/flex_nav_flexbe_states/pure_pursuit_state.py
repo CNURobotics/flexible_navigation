@@ -230,11 +230,11 @@ class PurePursuitState(EventState):
           return self._listener.listener().transformPoint(self._odom_frame, point)
 
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
-            Logger.logwarn('Failed to get the transformation:\n%s' % str(e))
+            Logger.logwarn('Failed to get the transformation\n%s' % str(e))
             self._failed = True
             return None
         except Exception as e:
-            Logger.logwarn('Failed to get the transformation due to unknown error:\n %s' % str(e) )
+            Logger.logwarn('Failed to get the transformation due to unknown error\n %s' % str(e) )
             self._failed = True
             return None
 
@@ -251,11 +251,11 @@ class PurePursuitState(EventState):
           return self._listener.listener().transformPoint(self._target_frame, odom_position)
 
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
-            Logger.logwarn('Failed to get the transformation to target_frame:\n%s' % str(e))
+            Logger.logwarn('Failed to get the transformation to target_frame\n%s' % str(e))
             self._failed = True
             return None
         except Exception as e:
-            Logger.logwarn('Failed to get the transformation to target frame due to unknown error:\n %s' % str(e) )
+            Logger.logwarn('Failed to get the transformation to target frame due to unknown error\n %s' % str(e) )
             self._failed = True
             return None
 
@@ -267,11 +267,11 @@ class PurePursuitState(EventState):
           return self._listener.listener().transformPoint(self._robot_frame, point)
 
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
-            Logger.logwarn('Failed to get the transformation:\n%s' % str(e))
+            Logger.logwarn('Failed to get the transformation\n%s' % str(e))
             self._failed = True
             return None
         except:
-            Logger.logwarn('Failed to get the transformation due to unknown error:\n' )
+            Logger.logwarn('Failed to get the transformation due to unknown error\n' )
             self._failed = True
             return None
 
@@ -305,7 +305,7 @@ class PurePursuitState(EventState):
         # If target point is withing lookahead distance then we are done
         dr = np.sqrt((local_target.point.x - self._current_position.point.x)**2 + (local_target.point.y - self._current_position.point.y)**2 )
         if (dr < self._lookahead):
-            Logger.loginfo(' %s : Lookahead circle is past target - done!: target=(%f, %f, %f) robot=(%f,%f, %f)  dr=%f lookahead=%f ' %
+            Logger.loginfo(' %s  Lookahead circle is past target - done! target=(%f, %f, %f) robot=(%f,%f, %f)  dr=%f lookahead=%f ' %
                     (self.name, local_target.point.x,local_target.point.y,local_target.point.z,
                      self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
                      dr,self._lookahead))
@@ -367,13 +367,13 @@ class PurePursuitState(EventState):
             self. _marker_pub.publish(self._marker_topic,self._marker)
 
         if (userdata.indice > 0 and userdata.indice < len(userdata.plan.poses)):
-            Logger.loginfo("   Access data for index %d" % userdata.indice)
+            Logger.loginfo("   Access data for index %d" % (userdata.indice) )
             self._target.point = Point(userdata.plan.poses[userdata.indice].pose.position.x, userdata.plan.poses[userdata.indice].pose.position.y, 0.0)
             self._prior.point  = Point(userdata.plan.poses[userdata.indice-1].pose.position.x, userdata.plan.poses[userdata.indice-1].pose.position.y, 0.0)
             Logger.loginfo("  Moving toward  target=%f,%f  from prior=%f,%f" %
                     (self._target.point.x, self._target.point.y, self._prior.point.x, self._prior.point.y))
         else:
-            Logger.logerr("   Invalid index %d - cannot access the path points!" % userdata.indice)
+            Logger.logerr("   Invalid index %d - cannot access the path points!" % (userdata.indice) )
             self._target.point = None
             self._prior.point  = None
             self._failed       = True
@@ -403,11 +403,11 @@ class PurePursuitState(EventState):
 
         # Wait for odometry message
         while (not self._odom_sub.has_msg(self._odom_topic)):
-            Logger.logwarn('Waiting for odometry message from the robot ...' )
+            Logger.logwarn('Waiting for odometry message from the robot ' )
             rospy.sleep(0.05)
 
         while (not self._odom_sub.has_msg(self._odom_topic)):
-            Logger.logwarn('Waiting for odometry message to become available from the robot ...' )
+            Logger.logwarn('Waiting for odometry message to become available from the robot ' )
             rospy.sleep(0.25)
 
         self._last_odom = self._sub.get_last_msg(self._odom_topic)
@@ -417,12 +417,12 @@ class PurePursuitState(EventState):
         # Update the target transformation
         self._target.header.stamp = self._last_odom.header.stamp
         while (self.transformOdom(self._target) is None):
-            Logger.logwarn('Waiting for tf transformations to odometry frame to become available from the robot ...' )
+            Logger.logwarn('Waiting for tf transformations to odometry frame to become available from the robot ' )
             rospy.sleep(0.25)
             self._target.header.stamp = rospy.Time.now()
 
         while (self.transformMap(self._last_odom) is None):
-            Logger.logwarn('Waiting for tf transformations to map frame become available from the robot ...' )
+            Logger.logwarn('Waiting for tf transformations to map frame become available from the robot ' )
             rospy.sleep(0.25)
             self._last_odom = self._sub.get_last_msg(self._odom_topic)
 
@@ -457,7 +457,7 @@ class PurePursuitState(EventState):
         c = (qv.x*qv.x + qv.y*qv.y) - self._lookahead*self._lookahead
 
         if (a < 0.001):
-            Logger.logerr(' %s : Invalid prior and target for line: target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f ' %
+            Logger.logerr(' %s  Invalid prior and target for line: target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f ' %
                  (self.name, local_target.point.x,local_target.point.y,local_target.point.z,
                   local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                   self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
@@ -468,7 +468,7 @@ class PurePursuitState(EventState):
         discrim = b*b - 4*a*c
         if (discrim < 0.0):
              # No intersection - this should not be unless bad start or localization perturbation
-            Logger.logwarn(' %s : No path recovery - no intersection for line: target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
+            Logger.logwarn(' %s  No path recovery - no intersection for line: target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
                  (self.name, local_target.point.x,local_target.point.y,local_target.point.z,
                   local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                   self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
@@ -481,7 +481,7 @@ class PurePursuitState(EventState):
             t1 = (-b - sqd)/(2*a)  # min value
             t2 = (-b + sqd)/(2*a)  # max value
             if (t2 < t1):
-                Logger.logwarn(' %s : Say what!: t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
+                Logger.logwarn(' %s  Say what! t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
                         (self.name, t1, t2, sqd,
                          local_target.point.x,local_target.point.y,local_target.point.z,
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
@@ -494,7 +494,7 @@ class PurePursuitState(EventState):
                 # all intersections are behind the segment - this should not be unless bad start or localization perturbation
                 if (t2 > -0.1):
                     # likely due to localization perturbation
-                    Logger.logwarn(' %s : Circle is before segment - continue prior motion!: t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
+                    Logger.logwarn(' %s  Circle is before segment - continue prior motion! t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
                         (self.name, t1, t2, sqd,
                          local_target.point.x,local_target.point.y,local_target.point.z,
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
@@ -502,7 +502,7 @@ class PurePursuitState(EventState):
                          pv.x, pv.y,qv.x,qv.y,a,b,c,discrim))
                     return None
                 else:
-                    Logger.logwarn(' %s : Circle is before segment!: t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
+                    Logger.logwarn(' %s  Circle is before segment! t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
                         (self.name, t1, t2, sqd,
                          local_target.point.x,local_target.point.y,local_target.point.z,
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
@@ -512,7 +512,7 @@ class PurePursuitState(EventState):
                     return None
             elif (t1 > 1.0):
                 # all intersections are past the segment
-                Logger.loginfo(' %s : Circle is past segment - done!: t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
+                Logger.loginfo(' %s  Circle is past segment - done! t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
                         (self.name, t1, t2, sqd,
                          local_target.point.x,local_target.point.y,local_target.point.z,
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
@@ -522,7 +522,7 @@ class PurePursuitState(EventState):
                 return None
             elif (t1 < 0.0 and t2 > 1.0):
                 # Segment is contained inside the lookahead circle
-                Logger.loginfo(' %s : Circle contains segment - move along!: t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
+                Logger.loginfo(' %s  Circle contains segment - move along! t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
                         (self.name, t1, t2, sqd,
                          local_target.point.x,local_target.point.y,local_target.point.z,
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
@@ -532,7 +532,7 @@ class PurePursuitState(EventState):
                 return None
             elif (t2 > 1.0):
                 # The lookahead circle extends beyond the target point - we are finished here
-                Logger.loginfo(' %s : Circle extends past segment - done!: t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
+                Logger.loginfo(' %s  Circle extends past segment - done! t1=%f t2=%f sqd=%f target=(%f, %f, %f) prior=(%f, %f, %f) robot=(%f,%f, %f)  pv=(%f,%f) qv=(%f,%f) a=%f b=%f c=%f discrim=%f ' %
                         (self.name, t1, t2, sqd,
                          local_target.point.x,local_target.point.y,local_target.point.z,
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,

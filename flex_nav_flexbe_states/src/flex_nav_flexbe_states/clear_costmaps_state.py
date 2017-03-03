@@ -37,9 +37,9 @@ class ClearCostmapsState(EventState):
         for i in range(len(self._clients_list)):
             try:
                 self._clients_list[i].send_goal(self._topics[i], ClearCostmapGoal)
-                Logger.loginfo('clearing costmap of topic: %s' %(self._topics[i]) )
+                Logger.loginfo('clearing costmap of topic  %s ' %(self._topics[i]) )
             except:
-                Logger.logwarn('Was not able to clear costmap of topic: %s' %(self._topics[i]))
+                Logger.logwarn('Was not able to clear costmap of topic  %s ' %(self._topics[i]))
                 return 'failed'
 
         return 'done'

@@ -60,7 +60,7 @@ class LogPathState(EventState):
         Execute this state
         """
 
-        Logger.loginfo('Dumping path points:')
+        Logger.loginfo('Dumping path points')
         Logger.loginfo('')
 
         for index in range(len(userdata.plan.poses)):

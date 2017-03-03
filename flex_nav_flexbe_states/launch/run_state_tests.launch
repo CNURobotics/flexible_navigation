@@ -1,0 +1,13 @@
+<launch>
+        <arg name="path" value="$(find flex_nav_flexbe_states)/tests" />
+
+        <include file="$(find flexbe_testing)/launch/flexbe_testing.launch">
+                <arg name="compact_format" value="true" />
+                <arg name="testcases" value="
+                        $(arg path)/get_path_state.test
+                        $(arg path)/get_pose_state.test
+                        $(arg path)/log_path_state.test
+                        $(arg path)/pure_pursuit_state.test
+                " />
+        </include>
+</launch>

@@ -18,9 +18,5 @@ catkin_package(
     INCLUDE_DIRS src
     LIBRARIES ${PROJECT_NAME})
 
-# use add_library() or add_executable() as required
-#add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SRCS})
-
 # install executables
-#install(PROGRAMS bin/hello
-#        DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(DIRECTORY src  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
