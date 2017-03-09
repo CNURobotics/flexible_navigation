@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2017
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -78,4 +78,4 @@ class GetPoseState(EventState):
         if self._sub.has_msg(self._topic):
             Logger.loginfo('%s  Clearing prior goal' % (self.name))
             self._sub.remove_last_msg(self._topic)
-        Logger.loginfo('%s Input new goal ' % (self.name))
+        Logger.loghint('%s  Input new 2D Nav goal (e.g. via RViz) ' % (self.name))
