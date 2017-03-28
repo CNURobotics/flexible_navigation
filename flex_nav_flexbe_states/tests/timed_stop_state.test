@@ -1,0 +1,12 @@
+path: flex_nav_flexbe_states.timed_stop_state
+class: TimedStopState
+
+import_only: false
+
+params:
+    timeout:        0.5
+    cmd_topic:      '/turtlebot/cmd_vel'
+    odom_topic:     '/turtlebot/odom'
+
+outcome:
+    failed

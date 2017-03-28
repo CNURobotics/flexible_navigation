@@ -90,8 +90,8 @@ class PurePursuitState(EventState):
                         target_frame='map', target_x=1.0, target_y=0.1, target_type='line',
                         lookahead_distance=0.25, timeout=0.08, recover_mode=False,
                         center_x=0.0, center_y=0.0,
-                        cmd_topic='/create_node/cmd_vel', odometry_topic='/create_node/odom',
-                        marker_topic='/pure_pursuit_marker', marker_size=0.05):
+                        cmd_topic='cmd_vel', odometry_topic='odom',
+                        marker_topic='pure_pursuit_marker', marker_size=0.05):
         # Declare outcomes, input_keys, and output_keys by calling the super constructor with the corresponding arguments.
         super(PurePursuitState, self).__init__(outcomes = ['done', 'continue', 'failed'],
                                                      input_keys = ['indice', 'plan'],
@@ -140,7 +140,7 @@ class PurePursuitState(EventState):
         # Thus, we cannot save the starting time now and will do so later.
         self._start_time = None
 
-        self._done       = None # Track the outcome so we can detect if transition is blocked
+        self._return     = None # Track the outcome so we can detect if transition is blocked
 
         self._odom_topic   = odometry_topic
         self._marker_topic = marker_topic
@@ -279,13 +279,13 @@ class PurePursuitState(EventState):
         # This method is called periodically while the state is active.
         # If no outcome is returned, the state will stay active.
 
-        if (self._done):
+        if (self._return):
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
             ts = TwistStamped()
             ts.header.stamp = rospy.Time.now()
             self._pub.publish(self._cmd_topic, ts)
-            return self._done
+            return self._return
 
         # Get the latest odometry data
         if (self._sub.has_msg(self._odom_topic)):
@@ -294,7 +294,7 @@ class PurePursuitState(EventState):
         # Update the current pose
         self._current_position = self.transformMap(self._last_odom)
         if (self._failed):
-             self._done = 'failed'
+             self._return = 'failed'
              return 'failed'
 
         # Transform the target points into the current odometry frame
@@ -311,17 +311,17 @@ class PurePursuitState(EventState):
                      dr,self._lookahead))
             if (userdata.indice == len(userdata.plan.poses)-1):
 
-                self._done = 'done'
+                self._return = 'done'
                 return 'done'
             else:
-                self._done = 'continue'
+                self._return = 'continue'
                 return 'continue'
 
         # Transform the prior target point into the current odometry frame
         self._prior.header.stamp = self._last_odom.header.stamp
         local_prior = self._prior#self.transformOdom(self._prior)
         if (self._failed):
-             self._done = 'failed'
+             self._return = 'failed'
              return 'failed'
 
         # Assume we can go the desired velocity
@@ -332,9 +332,9 @@ class PurePursuitState(EventState):
 
         if (lookahead is None):
              # Did not get a lookahead point so we either failed, completed segment, or are deliberately holding the prior velocity (to recover from minor perturbations)
-             if (self._done is not None):
+             if (self._return is not None):
                  Logger.logerr("No lookahead!")
-             return self._done # return what was set (either 'failed' or 'done')
+             return self._return # return what was set (either 'failed' or 'done')
 
         # Sanity check the rotation rate
         if (math.fabs(self._twist.twist.angular.z) > self._max_rotation_rate):
@@ -355,7 +355,7 @@ class PurePursuitState(EventState):
 
         # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
         self._start_time = rospy.Time.now()
-        self._done       = None  # reset the completion flag
+        self._return     = None  # reset the completion flag
         self._failed     = False # reset the failed flag
 
         if (self._marker_pub):
@@ -370,15 +370,16 @@ class PurePursuitState(EventState):
             Logger.loginfo("   Access data for index %d" % (userdata.indice) )
             self._target.point = Point(userdata.plan.poses[userdata.indice].pose.position.x, userdata.plan.poses[userdata.indice].pose.position.y, 0.0)
             self._prior.point  = Point(userdata.plan.poses[userdata.indice-1].pose.position.x, userdata.plan.poses[userdata.indice-1].pose.position.y, 0.0)
-            Logger.loginfo("  Moving toward  target=%f,%f  from prior=%f,%f" %
-                    (self._target.point.x, self._target.point.y, self._prior.point.x, self._prior.point.y))
+            Logger.loginfo("  Moving toward  target %d =%f,%f  from prior=%f,%f" %
+                    (userdata.indice, self._target.point.x, self._target.point.y, self._prior.point.x, self._prior.point.y))
         else:
             Logger.logerr("   Invalid index %d - cannot access the path points!" % (userdata.indice) )
             self._target.point = None
             self._prior.point  = None
             self._failed       = True
-            self._done         = 'failed'
+            self._return         = 'failed'
 
+        # Increment the index for the next segment
         userdata.indice += 1
 
 
@@ -400,6 +401,7 @@ class PurePursuitState(EventState):
 
     def on_start(self):
 
+        self._return = None # Clear completion flag
 
         # Wait for odometry message
         while (not self._odom_sub.has_msg(self._odom_topic)):
@@ -462,7 +464,7 @@ class PurePursuitState(EventState):
                   local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                   self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
                   pv.x, pv.y,qv.x,qv.y,a,b,c))
-            self._done = 'failed'
+            self._return = 'failed'
             return None
 
         discrim = b*b - 4*a*c
@@ -473,7 +475,7 @@ class PurePursuitState(EventState):
                   local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                   self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
                   pv.x, pv.y,qv.x,qv.y,a,b,c,discrim))
-            self._done = 'failed'
+            self._return = 'failed'
             return None
         else:
             # solve quadratic equation for intersection points
@@ -487,7 +489,7 @@ class PurePursuitState(EventState):
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                          self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
                          pv.x, pv.y,qv.x,qv.y,a,b,c,discrim))
-                self._done = 'failed'
+                self._return = 'failed'
                 return None
 
             if (t2 < 0.0):
@@ -508,7 +510,7 @@ class PurePursuitState(EventState):
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                          self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
                          pv.x, pv.y,qv.x,qv.y,a,b,c,discrim))
-                    self._done = 'failed'
+                    self._return = 'failed'
                     return None
             elif (t1 > 1.0):
                 # all intersections are past the segment
@@ -518,7 +520,7 @@ class PurePursuitState(EventState):
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                          self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
                          pv.x, pv.y,qv.x,qv.y,a,b,c,discrim))
-                self._done = 'done'
+                self._return = 'done'
                 return None
             elif (t1 < 0.0 and t2 > 1.0):
                 # Segment is contained inside the lookahead circle
@@ -528,7 +530,7 @@ class PurePursuitState(EventState):
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                          self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
                          pv.x, pv.y,qv.x,qv.y,a,b,c,discrim))
-                self._done = 'done'
+                self._return = 'done'
                 return None
             elif (t2 > 1.0):
                 # The lookahead circle extends beyond the target point - we are finished here
@@ -538,7 +540,7 @@ class PurePursuitState(EventState):
                          local_prior.point.x ,local_prior.point.y ,local_prior.point.z,
                          self._current_position.point.x, self._current_position.point.y, self._current_position.point.z,
                          pv.x, pv.y,qv.x,qv.y,a,b,c,discrim))
-                self._done = 'done'
+                self._return = 'done'
                 return None
             else:
                 # This is the normal case

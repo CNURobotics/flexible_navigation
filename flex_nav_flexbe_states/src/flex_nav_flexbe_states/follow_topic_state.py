@@ -67,6 +67,7 @@ class FollowTopicState(EventState):
         self._planner_topic = planner_topic
         self._controller_topic = controller_topic
         self._client = ProxyActionClient({self._controller_topic: FollowTopicAction})
+        self._return = None
 
     def execute(self, userdata):
         """
@@ -75,23 +76,31 @@ class FollowTopicState(EventState):
 
         if self._client.has_result(self._controller_topic):
             result = self._client.get_result(self._controller_topic)
+
+            # Clear so we don't spam if the transition is blocked due to low autonomy level
+            ProxyActionClient._result[self._controller_topic] = None
+
             if result.code == 0:
                 Logger.loginfo('%s  Success!' % (self.name))
-                return 'done'
+                self._return = 'done'
             elif result.code == 1:
                 Logger.logerr('%s  Failure' % (self.name))
-                return 'failed'
+                self._return = 'failed'
             elif result.code == 2:
                 Logger.logerr('%s  Preempted' % (self.name))
-                return 'preempted'
+                self._return = 'preempted'
             else:
                 Logger.logerr('%s  Unknown error' % (self.name))
-                return 'failed'
+                self._return = 'failed'
+
+        return self._return
 
     def on_enter(self, userdata):
         """
         On enter, send action goal
         """
+
+        self._return = None # Reset the completion flag
 
         topic = String(data = self._planner_topic)
         result = FollowTopicGoal(topic = topic)

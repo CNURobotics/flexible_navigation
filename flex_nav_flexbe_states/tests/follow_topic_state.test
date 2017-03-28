@@ -1,0 +1,11 @@
+path: flex_nav_flexbe_states.follow_topic_state
+class: FollowTopicState
+
+import_only: true
+
+params:
+    planner_topic:     'follow_planner_topic'
+    controller_topic:  'follow_controller_topic'
+
+outcome:
+    done

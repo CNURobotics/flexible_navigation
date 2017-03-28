@@ -1,0 +1,11 @@
+path: flex_nav_flexbe_states.clear_costmaps_state
+class: ClearCostmapsState
+
+import_only: true
+
+params:
+    costmap_topics:    [ 'costmap1','costmap2']
+    timeout: 1.0
+    
+outcome:
+    done

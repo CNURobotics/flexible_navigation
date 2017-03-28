@@ -66,33 +66,35 @@ class FollowPlannerState(EventState):
 
         self._action_topic = topic
         self._client = ProxyActionClient({self._action_topic: FollowPathAction})
+        self._return = None
 
     def execute(self, userdata):
         """
         Execute this state
         """
-
         if self._client.has_result(self._action_topic):
             result = self._client.get_result(self._action_topic)
+            ProxyActionClient._result[self._action_topic] = None # Reset to avoid spam if blocked by low autonomy
             if result.code == 0:
                 Logger.loginfo('%s   Planning Success!' % (self.name))
-                return 'done'
+                self._return = 'done'
             elif result.code == 1:
                 Logger.logerr('%s   Failure' % (self.name))
-                return 'failed'
+                self._return =  'failed'
             elif result.code == 2:
                 Logger.logerr('%s   Preempted' % (self.name))
-                return 'preempted'
+                self._return =  'preempted'
             else:
                 Logger.logerr('%s   Unknown error' % (self.name))
-                return 'failed'
+                self._return =  'failed'
 
+        return self._return
 
     def on_enter(self, userdata):
         """
         On enter, send action goal
         """
-
+        self._return = None # Rest the completion flag
         result = FollowPathGoal(path = userdata.plan)
 
         try:

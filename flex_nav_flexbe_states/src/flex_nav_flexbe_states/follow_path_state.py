@@ -73,25 +73,28 @@ class FollowPathState(EventState):
 
         if self._client.has_result(self._action_topic):
             result = self._client.get_result(self._action_topic)
+            ProxyActionClient._result[self._action_topic] = None # Clear to avoid spam if blocked by low autonomy level
             if result.code == 0:
                 Logger.loginfo('%s   Success!'% (self.name))
-                return 'done'
+                self._return = 'done'
             elif result.code == 1:
                 Logger.logerr('%s   Failure'% (self.name))
-                return 'failed'
+                self._return = 'failed'
             elif result.code == 2:
                 Logger.logerr('%s   Preempted'% (self.name))
-                return 'preempted'
+                self._return = 'preempted'
             else:
                 Logger.logerr('%s   Unknown error'% (self.name))
-                return 'failed'
+                self._return = 'failed'
 
+        # Return prior value if blocked
+        return self._return
 
     def on_enter(self, userdata):
         """
         On enter, send action goal
         """
-
+        self._return = None
         result = FollowPathGoal(path = userdata.plan)
 
         try:
@@ -106,5 +109,5 @@ class FollowPathState(EventState):
             ProxyActionClient._result[self._action_topic] = None
 
         if self._client.is_active(self._action_topic):
-            Logger.logerr('%s   Canceling active goal'% (self.name)) 
+            Logger.logerr('%s   Canceling active goal'% (self.name))
             self._client.cancel(self._action_topic)

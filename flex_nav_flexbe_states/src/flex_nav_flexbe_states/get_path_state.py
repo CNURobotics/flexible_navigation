@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2017
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -67,6 +67,7 @@ class GetPathState(EventState):
 
         self._action_topic = planner_topic
         self._client = ProxyActionClient({self._action_topic: GetPathAction})
+        self._return = None
 
     def execute(self, userdata):
         """
@@ -75,27 +76,38 @@ class GetPathState(EventState):
 
         if self._client.has_result(self._action_topic):
             result = self._client.get_result(self._action_topic)
+
+            # Clear result so we can avoid spam if blocked by autonomy level
+            ProxyActionClient._result[self._action_topic] = None
+
+            # Set the appropriate return value
             if result.code == 0:
                 Logger.loginfo('%s  Got a plan!' % (self.name))
                 userdata.plan = result.plan
-                return 'planned'
+                self._return = 'planned'
+
             elif result.code == 1:
                 Logger.logerr('%s    Received an empty plan' % (self.name))
                 userdata.plan = None
-                return 'empty'
+                self._return = 'empty'
+
             elif result.code == 2:
                 Logger.logerr('%s    Failed to create a plan' % (self.name))
                 userdata.plan = None
-                return 'failed'
+                self._return = 'failed'
+
             else:
                 Logger.logerr('%s    Unknown error' % (self.name))
                 userdata.plan = None
-                return 'failed'
+                self._return = 'failed'
 
+        # Return stored value in case we are blocked
+        return self._return
 
     def on_enter(self, userdata):
         """Upon entering the state, send the footstep plan request."""
 
+        self._return = None
         result = GetPathGoal(pose = userdata.goal)
 
         try:

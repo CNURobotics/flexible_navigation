@@ -1,0 +1,10 @@
+path: flex_nav_flexbe_states.follow_path_state
+class: FollowPathState
+
+import_only: true
+
+params:
+    topic:     'follow_path_topic'
+
+outcome:
+    done

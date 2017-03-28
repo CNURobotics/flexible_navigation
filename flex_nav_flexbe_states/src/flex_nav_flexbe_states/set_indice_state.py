@@ -39,7 +39,7 @@ from flexbe_core import EventState
 
 class SetIndiceState(EventState):
     """
-    Sets the initial indice for the Pure Pursuit state
+    Sets the initial index into a planned path for the Pure Pursuit state
 
     ># plan         Path       The path.
 

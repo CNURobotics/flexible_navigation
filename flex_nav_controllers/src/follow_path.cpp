@@ -132,7 +132,7 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
     geometry_msgs::Twist cmd_vel;
     if (planner_->computeVelocityCommands(cmd_vel)) {
       geometry_msgs::TwistStamped result;
-      result.header.stamp = ros::Time();
+      result.header.stamp = ros::Time::now();
       result.header.frame_id = robot_frame_;
       result.twist = cmd_vel;
 

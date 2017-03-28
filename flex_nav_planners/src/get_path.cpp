@@ -104,7 +104,7 @@ void GetPath::execute(const flex_nav_common::GetPathGoalConstPtr &goal) {
 
   std::vector<geometry_msgs::PoseStamped> plan;
   flex_nav_common::GetPathResult result;
-  result.plan.header.stamp = ros::Time();
+  result.plan.header.stamp = ros::Time::now();
   if (planner_->makePlan(start, goal->pose, plan)) {
     result.plan.poses = plan;
     if (!plan.empty()) {

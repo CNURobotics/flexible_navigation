@@ -55,18 +55,26 @@ class LogPathState(EventState):
         """
         super(LogPathState, self).__init__(outcomes=['done'], input_keys=['plan'], output_keys=['plan'])
 
+        self._return = None
+
     def execute(self, userdata):
         """
         Execute this state
         """
 
-        Logger.loginfo('Dumping path points')
-        Logger.loginfo('')
+        if (self._return is None):
+            # Only log once in case the state is blocked by low autonomy
+            Logger.loginfo('Dumping path points')
+            Logger.loginfo('')
 
-        for index in range(len(userdata.plan.poses)):
-            point = userdata.plan.poses[index].pose.position
-            Logger.loginfo('#%i - (%f, %f, %f)' % (index, point.x, point.y, point.z))
+            for index in range(len(userdata.plan.poses)):
+                point = userdata.plan.poses[index].pose.position
+                Logger.loginfo('#%i - (%f, %f, %f)' % (index, point.x, point.y, point.z))
 
-        Logger.loginfo('')
+            Logger.loginfo('')
+            self._return = 'done'
 
         return 'done'
+
+    def on_enter(self,userdata):
+        self._return = None # Clear the completion flag

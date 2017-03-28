@@ -188,7 +188,7 @@ void FollowTopic::execute(
       }
 
       if (planner_->computeVelocityCommands(cmd_vel)) {
-        cur_twist.header.stamp = ros::Time();
+        cur_twist.header.stamp = ros::Time::now();
         cur_twist.header.frame_id = robot_frame_;
         cur_twist.twist = cmd_vel;
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2017
+#  Copyright (c) 2016
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -34,11 +34,7 @@
 #       WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 #       POSSIBILITY OF SUCH DAMAGE.
 ###############################################################################
-
-
-from __future__ import division
 import rospy
-import math
 
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
@@ -46,56 +42,62 @@ from flexbe_core.proxy import ProxySubscriberCached
 from flexbe_core.proxy import ProxyServiceCaller
 from flexbe_core.proxy import ProxyActionClient
 
-from geometry_msgs.msg import TwistStamped, Point, PointStamped
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import TwistStamped
 
-from flex_nav_common.msg import *
 
-class RotateAngleState(EventState):
+class TimedTwistState(EventState):
     '''
-    Rotates the robot through given angle in degrees in the given time defined by userdata
-    -- target_time      float       Time which needs to have passed since the behavior started
-    -- target_angle      float      Angle we want to rotate
-    -- odometry_topic   string      topic of the iRobot Create sensor state (default:   '/create_node/odom')
-    -- cmd_topic        string      Topic name of the robot command (default: '/create_node/cmd_vel')
-    <= done                         Given time has passed.
+    This state publishes an open loop constant TwistStamped command based on parameters.
+
+    -- target_time     float     Time which needs to have passed since the behavior started.
+    -- velocity        float     Body velocity (m/s)
+    -- rotation_rate   float     Angular rotation (radians/s)
+    -- cmd_topic       string    topic name of the robot velocity command (default: 'cmd_vel')
+    <= done                 Given time has passed.
     '''
-    def __init__(self, target_time, target_angle=360.0, cmd_topic='/create_node/cmd_vel', odometry_topic='/create_node/odom'):
-        super(RotateAngleState, self).__init__(outcomes = ['done'])
+
+    def __init__(self, target_time, velocity, rotation_rate, cmd_topic='cmd_vel'):
+        # Declare outcomes, input_keys, and output_keys by calling the super constructor with the corresponding arguments.
+        super(TimedTwistState, self).__init__(outcomes = ['done'])
+
+        # Store state parameter for later use.
         self._target_time           = rospy.Duration(target_time)
-        self._target_angle          = target_angle*3.141593/180.0
         self._twist                 = TwistStamped()
-        self._twist.twist.linear.x  = 0
-        self._twist.twist.angular.z = (self._target_angle / target_time)
+        self._twist.twist.linear.x  = velocity
+        self._twist.twist.angular.z = rotation_rate
+
+        # The constructor is called when building the state machine, not when actually starting the behavior.
+        # Thus, we cannot save the starting time now and will do so later.
+        self._start_time = None
+
+        self._done       = None # Track the outcome so we can detect if transition is blocked
 
         self._cmd_topic    = cmd_topic
         self._pub          = ProxyPublisher(       {self._cmd_topic: TwistStamped})
-        self._start_time   = None
-        self._return       = None # Track the outcome so we can detect if transition is blocked
 
     def execute(self, userdata):
+        # This method is called periodically while the state is active.
+        # If no outcome is returned, the state will stay active.
 
-        if (self._return):
+        if (self._done):
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
-            ts = TwistStamped()
+            ts = TwistStamped() # Zero twist to stop if blocked
             ts.header.stamp = rospy.Time.now()
             self._pub.publish(self._cmd_topic, ts)
-            return self._return
+            return self._done
 
-        #@TODO - modify to track actual angle instead of target time
-
-        if (rospy.Time.now() - self._start_time > self._target_time):
-            #The robot will twist in place until the desired time has elapsed
-            #Once it has the it will return done
-            self._return = 'done'
+        if rospy.Time.now() - self._start_time > self._target_time:
+            # Normal completion, do not bother repeating the publish
+            self._done = 'done'
             return 'done'
 
-        # Normal execution
-        self._twist.header.stamp = rospy.Time.now()
+        # Normal operation
+        self._twist.header.stamp = rospy.Time.now()  # update the timestamp
         self._pub.publish(self._cmd_topic, self._twist)
         return None
 
     def on_enter(self, userdata):
+        # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
         self._start_time = rospy.Time.now()
-        self._return     = None # reset the completion flag
+        self._done       = None # reset the completion flag

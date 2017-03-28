@@ -1,0 +1,13 @@
+path: flex_nav_flexbe_states.timed_twist_state
+class: TimedTwistState
+
+import_only: false
+
+params:
+    target_time:    0.5
+    velocity:       0.25
+    rotation_rate:  0.1
+    cmd_topic:      '/turtlebot/cmd_vel'
+
+outcome:
+    done
