@@ -40,7 +40,7 @@
 #include <geometry_msgs/TwistStamped.h>
 
 namespace flex_nav {
-FollowTopic::FollowTopic(tf::TransformListener &tf)
+FollowTopic::FollowTopic(tf2_ros::Buffer &tf)
     : tf_(tf), ft_server_(NULL), costmap_(NULL),
       loader_("nav_core", "nav_core::BaseLocalPlanner"), running_(false),
       name_(ros::this_node::getName()) {
@@ -91,7 +91,7 @@ void FollowTopic::execute(
   ros::NodeHandle n;
   ros::Rate r(controller_frequency_);
   geometry_msgs::PoseStamped location;
-  tf::Stamped<tf::Pose> pose;
+  geometry_msgs::PoseStamped pose;
   flex_nav_common::FollowTopicResult result;
   flex_nav_common::FollowTopicFeedback feedback;
   geometry_msgs::Twist cmd_vel;
@@ -153,7 +153,6 @@ void FollowTopic::execute(
     // Send the goal to the planner
     if (!planner_->setPlan(current_path_->poses)) {
       costmap_->getRobotPose(pose);
-      tf::poseStampedTFToMsg(pose, location);
 
       result.code =
           flex_nav_common::FollowTopicResult::FAILURE; // Could not set plan
@@ -169,7 +168,6 @@ void FollowTopic::execute(
     // This is where the actual work gets done
     do {
       costmap_->getRobotPose(pose);
-      tf::poseStampedTFToMsg(pose, location);
 
       ROS_DEBUG("[%s] Generating path from path: #%u", name_.c_str(),
                 current_path_->header.seq);
@@ -223,7 +221,6 @@ void FollowTopic::execute(
   }
 
   costmap_->getRobotPose(pose);
-  tf::poseStampedTFToMsg(pose, location);
 
   if (ft_server_->isPreemptRequested()) {
     ROS_WARN("[%s] Preempting goal...", name_.c_str());

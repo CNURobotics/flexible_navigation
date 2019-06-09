@@ -50,18 +50,18 @@ double distanceSquared(const geometry_msgs::PoseStamped &p1,
 }
 
 bool getTargetPointFromPath(
-    const double radius, const tf::Stamped<tf::Pose> &robot_pose,
+    const double radius, const geometry_msgs::PoseStamped &robot_pose,
     const std::vector<geometry_msgs::PoseStamped> &planned_path,
-    tf::Stamped<tf::Pose> &target_point) {
+    geometry_msgs::PoseStamped &target_point) {
   double x_diff = 0.0;
   double y_diff = 0.0;
   double sq_dist = 0.0;
 
   long i = 0;
   while (i < planned_path.size()) {
-    x_diff = robot_pose.getOrigin().x() -
+    x_diff = robot_pose.pose.position.x -
              planned_path[i].pose.position.x; // map frame calculations
-    y_diff = robot_pose.getOrigin().y() - planned_path[i].pose.position.y;
+    y_diff = robot_pose.pose.position.y - planned_path[i].pose.position.y;
     sq_dist = x_diff * x_diff + y_diff * y_diff;
 
     if (sq_dist <= radius) {
@@ -72,9 +72,9 @@ bool getTargetPointFromPath(
   }
 
   while (i < planned_path.size()) {
-    x_diff = robot_pose.getOrigin().x() -
+    x_diff = robot_pose.pose.position.x -
              planned_path[i].pose.position.x; // map frame calculations
-    y_diff = robot_pose.getOrigin().y() - planned_path[i].pose.position.y;
+    y_diff = robot_pose.pose.position.y - planned_path[i].pose.position.y;
     sq_dist = x_diff * x_diff + y_diff * y_diff;
 
     if (sq_dist > radius) {
@@ -84,10 +84,10 @@ bool getTargetPointFromPath(
     ++i;
   }
 
-  target_point.getOrigin().setX(planned_path[i - 1].pose.position.x);
-  target_point.getOrigin().setY(planned_path[i - 1].pose.position.y);
-  target_point.getOrigin().setZ(planned_path[i - 1].pose.position.z);
-  target_point.setRotation(tf::Quaternion(0.0, 0.0, 0.0, 1.0));
+  target_point.pose.position.x = planned_path[i - 1].pose.position.x;
+  target_point.pose.position.y = planned_path[i - 1].pose.position.y;
+  target_point.pose.position.z = planned_path[i - 1].pose.position.z;
+  target_point.pose.orientation = geometry_msgs::Quaternion();//0.0, 0.0, 0.0, 1.0);
 
   if (i == planned_path.size()) {
     return true;
@@ -100,8 +100,8 @@ bool getTargetPointFromPath(
   const double y0 = p0.pose.position.y;
   const double x1 = p1.pose.position.x;
   const double y1 = p1.pose.position.y;
-  const double xc = robot_pose.getOrigin().x();
-  const double yc = robot_pose.getOrigin().y();
+  const double xc = robot_pose.pose.position.x;
+  const double yc = robot_pose.pose.position.y;
   const double dx = x1 - x0;
   const double dy = y1 - y0;
 
@@ -122,11 +122,11 @@ bool getTargetPointFromPath(
     const double smin = std::min(s1, s2);
 
     if (smax >= 0.0 && smax <= 1.0) {
-      target_point.getOrigin().setX(x0 + smax * dx); // map frame
-      target_point.getOrigin().setY(y0 + smax * dy);
+      target_point.pose.position.x = (x0 + smax * dx); // map frame
+      target_point.pose.position.y = (y0 + smax * dy);
     } else if (smin >= 0.0 && smin <= 1.0) {
-      target_point.getOrigin().setX(x0 + smin * dx);
-      target_point.getOrigin().setY(y0 + smin * dy);
+      target_point.pose.position.x = (x0 + smin * dx);
+      target_point.pose.position.y = (y0 + smin * dy);
     }
   }
 

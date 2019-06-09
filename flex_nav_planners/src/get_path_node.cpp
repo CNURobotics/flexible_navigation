@@ -34,12 +34,14 @@
  ******************************************************************************/
 
 #include <flex_nav_planners/get_path.h>
+#include <tf2_ros/transform_listener.h>
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "get_path_node");
-  tf::TransformListener tf(ros::Duration(10));
+  tf2_ros::Buffer buffer(ros::Duration(10));
+  tf2_ros::TransformListener tf(buffer);
 
-  flex_nav::GetPath get_path(tf);
+  flex_nav::GetPath get_path(buffer);
 
   ros::spin();
   return (0);

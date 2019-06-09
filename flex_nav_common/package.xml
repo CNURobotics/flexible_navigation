@@ -1,6 +1,6 @@
 <package>
 	<name>flex_nav_common</name>
-	<version>0.0.1</version>
+	<version>0.2.0</version>
 	<description>
 
 		The flex_nav package is largely based on <a href="http://wiki.ros.org/move_base">move_base</a> meaning that, flex_nav supports the same features, but implements them differently.

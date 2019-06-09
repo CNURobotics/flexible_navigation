@@ -37,7 +37,8 @@
 #define FLEX_PLANNER_FOLLOW_COMMON_H
 
 #include <ros/ros.h>
-#include <tf/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <geometry_msgs/PoseStamped.h>
 
 namespace flex_nav {
 /**
@@ -58,9 +59,9 @@ double distanceSquared(const geometry_msgs::PoseStamped &p1,
  * @return True if a target point was successfully found
  */
 bool getTargetPointFromPath(
-    const double radius, const tf::Stamped<tf::Pose> &robot_pose,
+    const double radius, const geometry_msgs::PoseStamped &robot_pose,
     const std::vector<geometry_msgs::PoseStamped> &planned_path,
-    tf::Stamped<tf::Pose> &target_point);
-};
+    geometry_msgs::PoseStamped &target_point);
+}
 
 #endif

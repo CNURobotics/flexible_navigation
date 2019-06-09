@@ -41,7 +41,7 @@
 using costmap_2d::NO_INFORMATION;
 
 namespace flex_nav {
-GetPath::GetPath(tf::TransformListener &tf)
+GetPath::GetPath(tf2_ros::Buffer &tf)
     : tf_(tf), gp_server_(NULL), costmap_(NULL),
       loader_("nav_core", "nav_core::BaseGlobalPlanner"),
       name_(ros::this_node::getName()) {
@@ -87,9 +87,7 @@ GetPath::~GetPath() {
 
 void GetPath::execute(const flex_nav_common::GetPathGoalConstPtr &goal) {
   geometry_msgs::PoseStamped start;
-  tf::Stamped<tf::Pose> pose;
-  costmap_->getRobotPose(pose);
-  tf::poseStampedTFToMsg(pose, start);
+  costmap_->getRobotPose(start);
 
   ROS_INFO("[%s] Current location (%f, %f)", name_.c_str(),
            start.pose.position.x, start.pose.position.y);

@@ -40,7 +40,7 @@
 #include <geometry_msgs/Twist.h>
 
 namespace flex_nav {
-FollowPath::FollowPath(tf::TransformListener &tf)
+FollowPath::FollowPath(tf2_ros::Buffer &tf)
     : tf_(tf), fp_server_(NULL), costmap_(NULL),
       loader_("nav_core", "nav_core::BaseGlobalPlanner"), running_(false),
       name_(ros::this_node::getName()) {
@@ -127,17 +127,21 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
   while (running_ && n.ok() && !fp_server_->isNewGoalAvailable() &&
          !fp_server_->isPreemptRequested()) {
     geometry_msgs::PoseStamped transformed;
-    tf::Stamped<tf::Pose> pose;
-    tf::Stamped<tf::Pose> transformed_pose;
+
+    geometry_msgs::PoseStamped pose;
+    geometry_msgs::PoseStamped transformed_pose;
+
     costmap_->getRobotPose(pose); // odom frame
-    tf_.transformPose(goal->path.poses[0].header.frame_id, pose,
-                      transformed_pose); // map frame //@todo - fix path header
+
+    tf_.transform(pose, transformed_pose, goal->path.poses[0].header.frame_id);
+                                        // map frame //@todo - fix path header
                                          // frame_id and don't depend on having
                                          // pose vector being filled
-    tf::poseStampedTFToMsg(pose, start);
+
 
     // Do some work to find the goal point
-    tf::Stamped<tf::Pose> goal_pose;
+    geometry_msgs::PoseStamped goal_pose;
+
     costmap_2d::Costmap2D *costmap = costmap_->getCostmap();
     double r2 =
         std::min(costmap->getSizeInCellsX() * costmap->getResolution() / 2.0,
@@ -155,11 +159,11 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
       return;
     }
 
-    goal_pose.stamp_ = pose.stamp_; // Update the time stamp of point
-    goal_pose.frame_id_ = goal->path.poses[0].header.frame_id;
+    goal_pose.header.stamp = ros::Time();
+    goal_pose.header.frame_id = goal->path.poses[0].header.frame_id;
+    tf_.transform(transformed_pose, transformed, global_frame_);
 
-    tf_.transformPose(global_frame_, goal_pose, transformed_pose);
-    tf::poseStampedTFToMsg(transformed_pose, transformed);
+    transformed = transformed_pose;
 
     flex_nav_common::FollowPathFeedback feedback;
     feedback.pose = start.pose;

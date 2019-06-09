@@ -34,12 +34,14 @@
  ******************************************************************************/
 
 #include <flex_nav_controllers/follow_topic.h>
+#include <tf2_ros/transform_listener.h>
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "follow_topic_node");
-  tf::TransformListener tf(ros::Duration(10));
+  tf2_ros::Buffer buffer(ros::Duration(10));
+  tf2_ros::TransformListener tf(buffer);
 
-  flex_nav::FollowTopic flex_follower(tf);
+  flex_nav::FollowTopic flex_follower(buffer);
 
   ros::spin();
   return (0);

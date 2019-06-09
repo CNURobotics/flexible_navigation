@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2019
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -50,6 +50,7 @@
 #define FLEX_PLANNER_FOLLOW_PATH_H
 
 #include <ros/ros.h>
+#include <tf2_ros/buffer.h>
 
 #include <actionlib/server/simple_action_server.h>
 #include <flex_nav_common/ClearCostmapAction.h>
@@ -74,7 +75,7 @@ public:
    * @brief The constructor to instantiate a node
    * @param tf A reference to a TransformListener
    */
-  FollowPath(tf::TransformListener &tf);
+  FollowPath(tf2_ros::Buffer &tf);
 
   /**
    * @brief The destructor to tear down a node
@@ -94,7 +95,8 @@ private:
    */
   void clear_costmap(const flex_nav_common::ClearCostmapGoalConstPtr &goal);
 
-  tf::TransformListener &tf_;
+  // tf::TransformListener &tf_;
+  tf2_ros::Buffer &tf_;
   FollowPathActionServer *fp_server_;
   ClearCostmapActionServer *cc_server_;
   costmap_2d::Costmap2DROS *costmap_;

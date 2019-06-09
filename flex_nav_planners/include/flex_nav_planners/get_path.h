@@ -23,7 +23,7 @@
  *       "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *       LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
  *       FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- *       COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ *       COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABL*E FOR ANY DIRECT, INDIRECT,
  *       INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  *       BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
  *       LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
@@ -48,6 +48,7 @@
 #define FLEX_PLANNER_GET_PATH_H
 
 #include <ros/ros.h>
+#include <tf2_ros/buffer.h>
 
 #include <actionlib/server/simple_action_server.h>
 #include <flex_nav_common/ClearCostmapAction.h>
@@ -72,7 +73,7 @@ public:
    * @brief The constructor to instantiate a node
    * @param tf A reference to a TransformListener
    */
-  GetPath(tf::TransformListener &tf);
+  GetPath(tf2_ros::Buffer& tf);
 
   /**
    * @brief The destructor to tear down a node
@@ -92,7 +93,7 @@ private:
    */
   void clear_costmap(const flex_nav_common::ClearCostmapGoalConstPtr &goal);
 
-  tf::TransformListener &tf_;
+  tf2_ros::Buffer &tf_;
   GetPathActionServer *gp_server_;
   ClearCostmapActionServer *cc_server_;
   costmap_2d::Costmap2DROS *costmap_;

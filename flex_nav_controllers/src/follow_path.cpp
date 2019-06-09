@@ -39,8 +39,11 @@
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/TwistStamped.h>
 
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
+
 namespace flex_nav {
-FollowPath::FollowPath(tf::TransformListener &tf)
+FollowPath::FollowPath(tf2_ros::Buffer &tf)
     : tf_(tf), fp_server_(NULL), costmap_(NULL),
       loader_("nav_core", "nav_core::BaseLocalPlanner"), running_(false),
       name_(ros::this_node::getName()) {
@@ -89,7 +92,7 @@ FollowPath::~FollowPath() {
 void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
   ros::Rate r(controller_frequency_);
   geometry_msgs::PoseStamped location;
-  tf::Stamped<tf::Pose> pose;
+  geometry_msgs::PoseStamped pose;
 
   while (running_) {
     ROS_WARN_THROTTLE(0.25, "[%s] Waiting for lock", name_.c_str());
@@ -98,7 +101,6 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
 
   if (!planner_->setPlan(goal->path.poses)) {
     costmap_->getRobotPose(pose);
-    tf::poseStampedTFToMsg(pose, location);
 
     flex_nav_common::FollowPathResult abort;
     abort.code =
@@ -115,7 +117,6 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
   while (running_ && n.ok() && !fp_server_->isNewGoalAvailable() &&
          !fp_server_->isPreemptRequested()) {
     costmap_->getRobotPose(pose);
-    tf::poseStampedTFToMsg(pose, location);
 
     if (planner_->isGoalReached()) {
       ROS_INFO("[%s] Success!", name_.c_str());
@@ -160,7 +161,6 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
   }
 
   costmap_->getRobotPose(pose);
-  tf::poseStampedTFToMsg(pose, location);
 
   if (fp_server_->isPreemptRequested()) {
     ROS_WARN("[%s] Preempting goal...", name_.c_str());

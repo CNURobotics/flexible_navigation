@@ -49,6 +49,7 @@
 #define FLEX_PLANNER_FOLLOW_TOPIC_H
 
 #include <ros/ros.h>
+#include <tf2_ros/buffer.h>
 
 #include <actionlib/server/simple_action_server.h>
 #include <flex_nav_common/ClearCostmapAction.h>
@@ -73,7 +74,7 @@ public:
    * @brief The constructor to instantiate a node
    * @param tf A reference to a TransformListener
    */
-  FollowTopic(tf::TransformListener &tf);
+  FollowTopic(tf2_ros::Buffer &tf);
 
   /**
    * @brief The destructor to tear down a node
@@ -99,7 +100,8 @@ private:
    */
   void clear_costmap(const flex_nav_common::ClearCostmapGoalConstPtr &goal);
 
-  tf::TransformListener &tf_;
+  // tf::TransformListener &tf_;
+  tf2_ros::Buffer &tf_;
   ros::Subscriber sub_;
   FollowTopicActionServer *ft_server_;
   ClearCostmapActionServer *cc_server_;
