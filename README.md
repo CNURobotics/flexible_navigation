@@ -29,7 +29,8 @@ should first follow the [ROS Install Guide] and get that set up before proceedin
 License
 -------
 
-	Copyright (c) 2016-2017
+	Copyright (c) 2016-2019
+
 	Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 	Christopher Newport University
 

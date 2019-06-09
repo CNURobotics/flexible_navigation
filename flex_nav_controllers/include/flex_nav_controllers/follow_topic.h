@@ -59,7 +59,7 @@
 #include <costmap_2d/costmap_2d_ros.h>
 #include <nav_core/base_local_planner.h>
 
-#include <pluginlib/class_loader.h>
+#include <pluginlib/class_loader.hpp>
 
 namespace flex_nav {
 typedef actionlib::SimpleActionServer<flex_nav_common::ClearCostmapAction>

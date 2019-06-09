@@ -91,7 +91,7 @@ class ClearCostmapsState(EventState):
                     else:
                         Logger.logerr('   Unknown error clearing %s'% (self._topics[i]))
             except:
-                Logger.logwarn(' Was not able to clear costmap of topic  %s ' %(self._topics[i]))
+                Logger.logwarn(' Exception: Was not able to clear costmap of topic  %s ' %(self._topics[i]))
 
             if (not self._costmaps_cleared[i]):
                 # This cost map has not confirmed that it is cleared yet

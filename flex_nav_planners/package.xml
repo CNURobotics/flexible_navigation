@@ -1,5 +1,5 @@
 <package>
-	<name>flex_nav_planner</name>
+	<name>flex_nav_planners</name>
 	<version>0.0.1</version>
 	<description>
 
@@ -14,6 +14,7 @@
 
 	<build_depend>actionlib</build_depend>
 	<build_depend>actionlib_msgs</build_depend>
+	<build_depend>base_local_planner</build_depend>
 	<build_depend>flex_nav_common</build_depend>
 	<build_depend>geometry_msgs</build_depend>
 	<build_depend>nav_core</build_depend>
@@ -26,6 +27,7 @@
 
 	<run_depend>actionlib</run_depend>
 	<run_depend>actionlib_msgs</run_depend>
+	<run_depend>base_local_planner</run_depend>
 	<run_depend>flex_nav_common</run_depend>
 	<run_depend>geometry_msgs</run_depend>
 	<run_depend>nav_core</run_depend>
