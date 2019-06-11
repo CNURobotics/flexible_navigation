@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2019
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -132,4 +132,33 @@ bool getTargetPointFromPath(
 
   return true;
 }
+
+/**
+ * @brief transform robot pose into specified frame
+ */
+bool transformRobot(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &transformed_pose, const string& frame_id)
+{
+    try
+    {
+      tf_.transform(pose, transformed_pose,frame_id);
+      return true;
+    }
+    catch (tf2::LookupException& ex)
+    {
+      ROS_ERROR_THROTTLE(1.0, "No Transform available Error looking up robot pose: %s\n", ex.what());
+      return false;
+    }
+    catch (tf2::ConnectivityException& ex)
+    {
+      ROS_ERROR_THROTTLE(1.0, "Connectivity Error looking up robot pose: %s\n", ex.what());
+      return false;
+    }
+    catch (tf2::ExtrapolationException& ex)
+    {
+      ROS_ERROR_THROTTLE(1.0, "Extrapolation Error looking up robot pose: %s\n", ex.what());
+      return false;
+    }
+
+}
+
 }

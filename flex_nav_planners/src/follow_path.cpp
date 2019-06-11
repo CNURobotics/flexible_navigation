@@ -38,6 +38,7 @@
 #include <flex_nav_planners/follow_path.h>
 
 #include <geometry_msgs/Twist.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 namespace flex_nav {
 FollowPath::FollowPath(tf2_ros::Buffer &tf)
@@ -91,22 +92,11 @@ FollowPath::~FollowPath() {
 
 void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
   ros::Rate r(planner_frequency_);
-  geometry_msgs::PoseStamped start;
   flex_nav_common::FollowPathResult result;
-  result.pose = start.pose;
+  result.pose = goal.pose;
 
   ROS_INFO(" [%s] Received goal  (%d)", name_.c_str(),
            fp_server_->isNewGoalAvailable());
-
-  if (goal->path.poses.empty()) {
-    ROS_ERROR("[%s] The path is empty!", name_.c_str());
-    return;
-  }
-
-  if (goal->path.poses[0].header.frame_id == "") {
-    ROS_ERROR("[%s] The frame_id is empty!", name_.c_str());
-    return;
-  }
 
   while (running_) {
     ROS_WARN_THROTTLE(0.25, "[%s] Waiting for lock", name_.c_str());
@@ -114,7 +104,21 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
 
   while (fp_server_->isNewGoalAvailable()) {
     ROS_WARN_THROTTLE(0.25, "[%s] Waiting for prior goal to clear ",
-                      name_.c_str());
+                     name_.c_str());
+  }
+
+  if (goal->path.poses.empty()) {
+    ROS_ERROR("[%s] The path is empty!", name_.c_str());
+    result.code = flex_nav_common::FollowPathResult::FAILURE;
+    fp_server_->setAborted(result, "Path is empty!");
+    return;
+  }
+
+  if (goal->path.poses[0].header.frame_id == "") {
+    ROS_ERROR("[%s] The frame_id is empty!", name_.c_str());
+    result.code = flex_nav_common::FollowPathResult::FAILURE;
+    fp_server_->setAborted(result, "frame_id is empty!");
+    return;
   }
 
   ROS_INFO(
@@ -126,14 +130,26 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
   ros::NodeHandle n;
   while (running_ && n.ok() && !fp_server_->isNewGoalAvailable() &&
          !fp_server_->isPreemptRequested()) {
-    geometry_msgs::PoseStamped transformed;
+    geometry_msgs::PoseStamped start_pose_map;
+    geometry_msgs::PoseStamped start_pose_path;
+    geometry_msgs::PoseStamped goal_pose_map;
+    geometry_msgs::PoseStamped goal_pose_path;
 
-    geometry_msgs::PoseStamped pose;
-    geometry_msgs::PoseStamped transformed_pose;
+    // Get the current robot pose
+    costmap_->getRobotPose(start_pose_map);
+    if (!transformRobot(start_pose_map, start_pose_path, goal->path.poses[0].header.frame_id))
+    {
+      ROS_ERROR("[%s] No valid starting point found along path", name_.c_str());
+      result.code = flex_nav_common::FollowPathResult::FAILURE;
+      ft_server_->setAborted(result, "Failed to transform starting pose!");
+      running_ = false;
+      return;
 
-    costmap_->getRobotPose(pose); // odom frame
+    }
+    result.pose = start.pose;
+    feedback.pose = start.pose;
 
-    tf_.transform(pose, transformed_pose, goal->path.poses[0].header.frame_id);
+    //tf_.transform(pose, transformed_pose, goal->path.poses[0].header.frame_id);
                                         // map frame //@todo - fix path header
                                          // frame_id and don't depend on having
                                          // pose vector being filled
@@ -149,8 +165,8 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
         costmap->getResolution() * 2;
     r2 = r2 * r2;
 
-    if (!getTargetPointFromPath(r2, transformed_pose, goal->path.poses,
-                                goal_pose)) {
+    if (!getTargetPointFromPath(r2, start_pose_path, goal->path.poses,
+                                goal_pose_path)) {
       ROS_ERROR("[%s] No valid point found - cannot get a valid goal",
                 name_.c_str());
       result.code = flex_nav_common::FollowPathResult::FAILURE;
@@ -159,18 +175,24 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
       return;
     }
 
-    goal_pose.header.stamp = ros::Time();
-    goal_pose.header.frame_id = goal->path.poses[0].header.frame_id;
-    tf_.transform(transformed_pose, transformed, global_frame_);
+    goal_pose_map.header.stamp = ros::Time();
+    goal_pose_map.header.frame_id = global_frame_;
+    if (!transformRobot(goal_pose_path, goal_pose_map, global_frame_))
+    {
+      ROS_ERROR("[%s] No valid starting goal point found along path", name_.c_str());
+      result.code = flex_nav_common::FollowPathResult::FAILURE;
+      ft_server_->setAborted(result, "Failed to transform goal pose!");
+      running_ = false;
+      return;
 
-    transformed = transformed_pose;
+    }
 
     flex_nav_common::FollowPathFeedback feedback;
     feedback.pose = start.pose;
     fp_server_->publishFeedback(feedback);
 
     std::vector<geometry_msgs::PoseStamped> plan;
-    if (planner_->makePlan(start, transformed, plan)) {
+    if (planner_->makePlan(goal_pose_map, goal_pose_map, plan)) {
       if (plan.empty()) {
         ROS_WARN("[%s] Empty path - abort goal!", name_.c_str());
         result.code = flex_nav_common::FollowPathResult::FAILURE; // empty plan
@@ -188,7 +210,7 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
     }
 
     double threshold = distance_threshold_ * costmap->getResolution();
-    if (distanceSquared(start, transformed) <= threshold * threshold) {
+    if (distanceSquared(start_pose_path, goal_pose_path) <= threshold * threshold) {
       ROS_INFO("[%s] Reached goal - Success!", name_.c_str());
       result.code = flex_nav_common::FollowPathResult::SUCCESS;
       fp_server_->setSucceeded(result, "Success!");

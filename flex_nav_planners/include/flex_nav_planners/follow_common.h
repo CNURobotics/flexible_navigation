@@ -39,6 +39,7 @@
 #include <ros/ros.h>
 #include <tf2_ros/buffer.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 namespace flex_nav {
 /**
@@ -62,6 +63,11 @@ bool getTargetPointFromPath(
     const double radius, const geometry_msgs::PoseStamped &robot_pose,
     const std::vector<geometry_msgs::PoseStamped> &planned_path,
     geometry_msgs::PoseStamped &target_point);
-}
 
+
+/**
+ * @brief transform robot pose into specified frame
+ */
+bool transformRobot(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &transformed_pose, const string& frame_id);
+}
 #endif

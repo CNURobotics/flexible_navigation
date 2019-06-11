@@ -92,10 +92,6 @@ void FollowTopic::execute(
     const flex_nav_common::FollowTopicGoalConstPtr &goal) {
   ros::NodeHandle n;
   ros::Rate r(planner_frequency_);
-  geometry_msgs::PoseStamped start;
-  flex_nav_common::FollowTopicResult result;
-  flex_nav_common::FollowTopicFeedback feedback;
-  ros::Time start_time;
 
   while (running_) {
     ROS_WARN_THROTTLE(0.25, "[%s] Waiting for lock", name_.c_str());
@@ -145,8 +141,6 @@ void FollowTopic::execute(
     r.sleep();
   }
 
-  result.pose = start.pose;
-
   running_ = true;
   while (running_ && n.ok() && !ft_server_->isNewGoalAvailable() &&
          !ft_server_->isPreemptRequested()) {
@@ -168,10 +162,28 @@ void FollowTopic::execute(
     geometry_msgs::PoseStamped pose;
     geometry_msgs::PoseStamped datTFPose;
     geometry_msgs::PoseStamped transformed_pose;
+
+    geometry_msgs::PoseStamped start;
+    flex_nav_common::FollowTopicResult result;
+    flex_nav_common::FollowTopicFeedback feedback;
+    ros::Time start_time;
+
+    // Get the current pose of the robot
     costmap_->getRobotPose(pose); // odom frame
+    result.pose = pose.pose;
 
-    tf_.transform(pose, transformed_pose, current_path_->poses[0].header.frame_id);
+    if (!transformRobot(pose, start, current_path_->poses[0].header.frame_id))
+    {
+      ROS_ERROR("[%s] No valid starting point found", name_.c_str());
+      ROS_ERROR("[%s] Could not get a valid goal", name_.c_str());
+      result.code = flex_nav_common::FollowTopicResult::FAILURE;
+      ft_server_->setAborted(result, "Failed to transform starting pose!");
+      running_ = false;
+      return;
 
+    }
+
+    result.pose = start.pose;
     ROS_DEBUG("[%s] Generating path from path: #%u", name_.c_str(),
               current_path_->header.seq);
 
@@ -185,24 +197,32 @@ void FollowTopic::execute(
         costmap->getResolution() * 2;
     r2 = r2 * r2;
 
-    if (!getTargetPointFromPath(r2, transformed_pose, current_path_->poses,
+    if (!getTargetPointFromPath(r2, start, current_path_->poses,
                                 goal_pose)) {
-      ROS_ERROR("[%s] No valid point found", name_.c_str());
-      ROS_ERROR("[%s] Could not get a valid goal", name_.c_str());
+      ROS_ERROR("[%s] No valid point found along path", name_.c_str());
+      ROS_ERROR("[%s] Could not get a valid goal along path", name_.c_str());
       result.code = flex_nav_common::FollowTopicResult::FAILURE;
-      ft_server_->setAborted(result, "Failed to get a valid goal");
+      ft_server_->setAborted(result, "Failed to get a valid goal point along path");
       running_ = false;
       return;
     }
 
-    tf_.transform(transformed_pose, transformed, current_path_->poses[0].header.frame_id);
-    transformed = transformed_pose;
+    double threshold = distance_threshold_ * costmap->getResolution();
+    if (distanceSquared(start, goal_pose) <= threshold * threshold) {
+      result.code = flex_nav_common::FollowTopicResult::SUCCESS;
+      ft_server_->setSucceeded(result, "Success!");
+      running_ = false;
+      return;
+    }
+
+    //tf_.transform(transformed_pose, transformed, current_path_->poses[0].header.frame_id);
+    //transformed = transformed_pose;
 
     feedback.pose = start.pose;
     ft_server_->publishFeedback(feedback);
 
     std::vector<geometry_msgs::PoseStamped> plan;
-    if (planner_->makePlan(start, transformed, plan)) {
+    if (planner_->makePlan(start, goal_pose, plan)) {
       if (plan.empty()) {
         result.code = flex_nav_common::FollowTopicResult::FAILURE; // empty plan
         ft_server_->setAborted(result, "Empty path");
@@ -213,14 +233,6 @@ void FollowTopic::execute(
       result.code =
           flex_nav_common::FollowTopicResult::FAILURE; // failed to make plan
       ft_server_->setAborted(result, "Failed to make plan");
-      running_ = false;
-      return;
-    }
-
-    double threshold = distance_threshold_ * costmap->getResolution();
-    if (distanceSquared(start, transformed) <= threshold * threshold) {
-      result.code = flex_nav_common::FollowTopicResult::SUCCESS;
-      ft_server_->setSucceeded(result, "Success!");
       running_ = false;
       return;
     }
