@@ -122,7 +122,7 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
   }
 
   ROS_INFO(
-      " [%s] Ready to process latest goal  New Goal(%d) Prempt Requested(%d)",
+      " [%s] Ready to process latest goal  New Goal(%d) Preempt Requested(%d)",
       name_.c_str(), fp_server_->isNewGoalAvailable(),
       fp_server_->isPreemptRequested());
 
@@ -135,8 +135,11 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
     geometry_msgs::PoseStamped goal_pose_map;
     geometry_msgs::PoseStamped goal_pose_path;
 
-    // Get the current robot pose
+    // Get the current robot pose from costmap
     costmap_->getRobotPose(start_pose_map);
+
+    start_pose_path.header.stamp = start_pose_map.header.stamp;
+    // Transform the pose into the same frame as path to follow
     if (!transformRobot(start_pose_map, start_pose_path, goal->path.poses[0].header.frame_id))
     {
       ROS_ERROR("[%s] No valid starting point found along path", name_.c_str());
@@ -146,18 +149,11 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
       return;
 
     }
-    result.pose = start.pose;
-    feedback.pose = start.pose;
 
-    //tf_.transform(pose, transformed_pose, goal->path.poses[0].header.frame_id);
-                                        // map frame //@todo - fix path header
-                                         // frame_id and don't depend on having
-                                         // pose vector being filled
+    // Update result with latest robot pose information
+    result.pose   = start_pose_path.pose;
 
-
-    // Do some work to find the goal point
-    geometry_msgs::PoseStamped goal_pose;
-
+    // Do some work to find the goal point along the desired path
     costmap_2d::Costmap2D *costmap = costmap_->getCostmap();
     double r2 =
         std::min(costmap->getSizeInCellsX() * costmap->getResolution() / 2.0,
@@ -167,28 +163,38 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
 
     if (!getTargetPointFromPath(r2, start_pose_path, goal->path.poses,
                                 goal_pose_path)) {
-      ROS_ERROR("[%s] No valid point found - cannot get a valid goal",
+      ROS_ERROR("[%s] No valid point found - cannot get a valid goal along path",
                 name_.c_str());
       result.code = flex_nav_common::FollowPathResult::FAILURE;
-      fp_server_->setAborted(result, "Failed to get a valid goal");
+      fp_server_->setAborted(result, "Failed to get a valid goal along path");
       running_ = false;
       return;
     }
 
+    // Convert the goal point from path frame to map frame
     goal_pose_map.header.stamp = ros::Time();
     goal_pose_map.header.frame_id = global_frame_;
     if (!transformRobot(goal_pose_path, goal_pose_map, global_frame_))
     {
-      ROS_ERROR("[%s] No valid starting goal point found along path", name_.c_str());
+      ROS_ERROR("[%s] No valid transform for the goal point found along path", name_.c_str());
       result.code = flex_nav_common::FollowPathResult::FAILURE;
       ft_server_->setAborted(result, "Failed to transform goal pose!");
       running_ = false;
       return;
-
     }
 
+    double threshold = distance_threshold_ * costmap->getResolution();
+    if (distanceSquared(start_pose_path, goal_pose_path) <= threshold * threshold) {
+      ROS_INFO("[%s] Reached goal - Success!", name_.c_str());
+      result.code = flex_nav_common::FollowPathResult::SUCCESS;
+      fp_server_->setSucceeded(result, "Success!");
+      running_ = false;
+      return;
+    }
+
+    // Update the status of robot while following the path
     flex_nav_common::FollowPathFeedback feedback;
-    feedback.pose = start.pose;
+    feedback.pose = start_pose_path.pose;
     fp_server_->publishFeedback(feedback);
 
     std::vector<geometry_msgs::PoseStamped> plan;
@@ -205,15 +211,6 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
       result.code =
           flex_nav_common::FollowPathResult::FAILURE; // failed to make plan
       fp_server_->setAborted(result, "Failed to make plan");
-      running_ = false;
-      return;
-    }
-
-    double threshold = distance_threshold_ * costmap->getResolution();
-    if (distanceSquared(start_pose_path, goal_pose_path) <= threshold * threshold) {
-      ROS_INFO("[%s] Reached goal - Success!", name_.c_str());
-      result.code = flex_nav_common::FollowPathResult::SUCCESS;
-      fp_server_->setSucceeded(result, "Success!");
       running_ = false;
       return;
     }
