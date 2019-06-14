@@ -141,6 +141,7 @@ void FollowTopic::execute(
     r.sleep();
   }
 
+  flex_nav_common::FollowTopicResult result;
   running_ = true;
   while (running_ && n.ok() && !ft_server_->isNewGoalAvailable() &&
          !ft_server_->isPreemptRequested()) {
@@ -156,23 +157,22 @@ void FollowTopic::execute(
       return;
     }
 
+    ros::Time start_time;
     start_time = ros::Time::now();
     geometry_msgs::PoseStamped transformed;
 
-    geometry_msgs::PoseStamped pose;
+    geometry_msgs::PoseStamped start_pose;
     geometry_msgs::PoseStamped datTFPose;
     geometry_msgs::PoseStamped transformed_pose;
 
-    geometry_msgs::PoseStamped start;
-    flex_nav_common::FollowTopicResult result;
+    geometry_msgs::PoseStamped start_pose_path;
     flex_nav_common::FollowTopicFeedback feedback;
-    ros::Time start_time;
 
     // Get the current pose of the robot
-    costmap_->getRobotPose(pose); // odom frame
-    result.pose = pose.pose;
+    costmap_->getRobotPose(start_pose); // odom frame
+    result.pose = start_pose.pose;
 
-    if (!transformRobot(pose, start, current_path_->poses[0].header.frame_id))
+    if (!transformRobot(tf_, start_pose, start_pose_path, current_path_->poses[0].header.frame_id))
     {
       ROS_ERROR("[%s] No valid starting point found", name_.c_str());
       ROS_ERROR("[%s] Could not get a valid goal", name_.c_str());
@@ -183,12 +183,12 @@ void FollowTopic::execute(
 
     }
 
-    result.pose = start.pose;
+    result.pose = start_pose_path.pose;
     ROS_DEBUG("[%s] Generating path from path: #%u", name_.c_str(),
               current_path_->header.seq);
 
     // Do some work to find the goal point
-    geometry_msgs::PoseStamped goal_pose;
+    geometry_msgs::PoseStamped goal_pose_path;
 
     costmap_2d::Costmap2D *costmap = costmap_->getCostmap();
     double r2 =
@@ -197,8 +197,8 @@ void FollowTopic::execute(
         costmap->getResolution() * 2;
     r2 = r2 * r2;
 
-    if (!getTargetPointFromPath(r2, start, current_path_->poses,
-                                goal_pose)) {
+    if (!getTargetPointFromPath(r2, start_pose_path, current_path_->poses,
+                                goal_pose_path)) {
       ROS_ERROR("[%s] No valid point found along path", name_.c_str());
       ROS_ERROR("[%s] Could not get a valid goal along path", name_.c_str());
       result.code = flex_nav_common::FollowTopicResult::FAILURE;
@@ -206,9 +206,10 @@ void FollowTopic::execute(
       running_ = false;
       return;
     }
+    result.pose = goal_pose_path.pose;
 
     double threshold = distance_threshold_ * costmap->getResolution();
-    if (distanceSquared(start, goal_pose) <= threshold * threshold) {
+    if (distanceSquared(start_pose_path, goal_pose_path) <= threshold * threshold) {
       result.code = flex_nav_common::FollowTopicResult::SUCCESS;
       ft_server_->setSucceeded(result, "Success!");
       running_ = false;
@@ -218,11 +219,11 @@ void FollowTopic::execute(
     //tf_.transform(transformed_pose, transformed, current_path_->poses[0].header.frame_id);
     //transformed = transformed_pose;
 
-    feedback.pose = start.pose;
+    feedback.pose = goal_pose_path.pose;
     ft_server_->publishFeedback(feedback);
 
     std::vector<geometry_msgs::PoseStamped> plan;
-    if (planner_->makePlan(start, goal_pose, plan)) {
+    if (planner_->makePlan(start_pose_path, goal_pose_path, plan)) {
       if (plan.empty()) {
         result.code = flex_nav_common::FollowTopicResult::FAILURE; // empty plan
         ft_server_->setAborted(result, "Empty path");

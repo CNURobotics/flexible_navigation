@@ -68,6 +68,9 @@ bool getTargetPointFromPath(
 /**
  * @brief transform robot pose into specified frame
  */
-bool transformRobot(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &transformed_pose, const string& frame_id);
+bool transformRobot(const tf2_ros::Buffer &tf,
+                    const geometry_msgs::PoseStamped &current_pose,
+                    geometry_msgs::PoseStamped &transformed_pose,
+                    const std::string& frame_id);
 }
 #endif

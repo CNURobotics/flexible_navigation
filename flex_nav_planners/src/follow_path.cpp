@@ -93,7 +93,6 @@ FollowPath::~FollowPath() {
 void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
   ros::Rate r(planner_frequency_);
   flex_nav_common::FollowPathResult result;
-  result.pose = goal.pose;
 
   ROS_INFO(" [%s] Received goal  (%d)", name_.c_str(),
            fp_server_->isNewGoalAvailable());
@@ -140,11 +139,11 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
 
     start_pose_path.header.stamp = start_pose_map.header.stamp;
     // Transform the pose into the same frame as path to follow
-    if (!transformRobot(start_pose_map, start_pose_path, goal->path.poses[0].header.frame_id))
+    if (!transformRobot(tf_, start_pose_map, start_pose_path, goal->path.poses[0].header.frame_id))
     {
       ROS_ERROR("[%s] No valid starting point found along path", name_.c_str());
       result.code = flex_nav_common::FollowPathResult::FAILURE;
-      ft_server_->setAborted(result, "Failed to transform starting pose!");
+      fp_server_->setAborted(result, "Failed to transform starting pose!");
       running_ = false;
       return;
 
@@ -174,11 +173,13 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
     // Convert the goal point from path frame to map frame
     goal_pose_map.header.stamp = ros::Time();
     goal_pose_map.header.frame_id = global_frame_;
-    if (!transformRobot(goal_pose_path, goal_pose_map, global_frame_))
+    result.pose = goal_pose_path.pose;
+
+    if (!transformRobot(tf_, goal_pose_path, goal_pose_map, global_frame_))
     {
       ROS_ERROR("[%s] No valid transform for the goal point found along path", name_.c_str());
       result.code = flex_nav_common::FollowPathResult::FAILURE;
-      ft_server_->setAborted(result, "Failed to transform goal pose!");
+      fp_server_->setAborted(result, "Failed to transform goal pose!");
       running_ = false;
       return;
     }
@@ -194,7 +195,7 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
 
     // Update the status of robot while following the path
     flex_nav_common::FollowPathFeedback feedback;
-    feedback.pose = start_pose_path.pose;
+    feedback.pose = goal_pose_path.pose;
     fp_server_->publishFeedback(feedback);
 
     std::vector<geometry_msgs::PoseStamped> plan;

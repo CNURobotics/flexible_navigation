@@ -136,11 +136,14 @@ bool getTargetPointFromPath(
 /**
  * @brief transform robot pose into specified frame
  */
-bool transformRobot(const geometry_msgs::PoseStamped &current_pose, const geometry_msgs::PoseStamped &transformed_pose, const string& frame_id)
+bool transformRobot(const tf2_ros::Buffer &tf,
+                    const geometry_msgs::PoseStamped &current_pose,
+                    geometry_msgs::PoseStamped &transformed_pose,
+                    const std::string& frame_id)
 {
     try
     {
-      tf_.transform(pose, transformed_pose,frame_id);
+      tf.transform(current_pose, transformed_pose,frame_id);
       return true;
     }
     catch (tf2::LookupException& ex)
