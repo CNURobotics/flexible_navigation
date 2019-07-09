@@ -101,7 +101,7 @@ private:
 
   ros::Publisher vel_pub_;
   double controller_frequency_;
-  std::string name_, robot_frame_;
+  std::string name_, costmap_name_, robot_base_frame_;
 };
 };
 

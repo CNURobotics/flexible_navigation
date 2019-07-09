@@ -59,10 +59,16 @@ FollowPath::FollowPath(tf::TransformListener &tf)
                    std::string("middle_costmap"));
   private_nh.param(costmap_name_ + "/robot_base_frame", robot_base_frame_,
                    std::string("base_link"));
-  private_nh.param(costmap_name_ + "/reference_frame", global_frame_,
-                   std::string("/odom"));
+  private_nh.param(costmap_name_ + "/global_frame", global_frame_,
+                   std::string("odom"));
   private_nh.param("planner_frequency", planner_frequency_, 1.0);
   private_nh.param("distance_threshold", distance_threshold_, 5.0);
+
+  // make sure that we set the frames appropriately based on the tf_prefix
+  ros::NodeHandle prefix_nh;
+  std::string tf_prefix = tf::getPrefixParam(prefix_nh);
+  global_frame_ = tf::resolve(tf_prefix, global_frame_);
+  robot_base_frame_ = tf::resolve(tf_prefix, robot_base_frame_);
 
   costmap_ = new costmap_2d::Costmap2DROS(costmap_name_, tf);
   costmap_->pause();
@@ -130,6 +136,7 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
     tf::Stamped<tf::Pose> pose;
     tf::Stamped<tf::Pose> transformed_pose;
     costmap_->getRobotPose(pose); // odom frame
+
     tf_.transformPose(goal->path.poses[0].header.frame_id, pose,
                       transformed_pose); // map frame //@todo - fix path header
                                          // frame_id and don't depend on having
@@ -174,6 +181,13 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
         running_ = false;
         return;
       }
+      ROS_INFO("[%s] FollowPath: found path of %ld points from:\nstart (%.3f, %.3f, %.3f) q=[%.3f, %.3f, %.3f, %.3f] to \ngoal (%.3f, %.3f, %.3f) q=[%.3f, %.3f, %.3f, %.3f]",
+              name_.c_str(), plan.size(),
+              start.pose.position.x,    start.pose.position.y,    start.pose.position.z,
+              start.pose.orientation.x, start.pose.orientation.y, start.pose.orientation.z,   start.pose.orientation.w,
+              transformed.pose.position.x,    transformed.pose.position.y,    transformed.pose.position.z,
+              transformed.pose.orientation.x, transformed.pose.orientation.y, transformed.pose.orientation.z,   transformed.pose.orientation.w);
+
     } else {
       ROS_WARN("[%s] Failed to make plan - abort goal!", name_.c_str());
       result.code =

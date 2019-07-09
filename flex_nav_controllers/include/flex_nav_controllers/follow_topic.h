@@ -113,7 +113,7 @@ private:
   nav_msgs::PathConstPtr latest_path_;
 
   double controller_frequency_;
-  std::string name_, robot_frame_;
+  std::string name_, costmap_name_, robot_base_frame_;
 };
 };
 

@@ -87,7 +87,10 @@ bool getTargetPointFromPath(
   target_point.getOrigin().setX(planned_path[i - 1].pose.position.x);
   target_point.getOrigin().setY(planned_path[i - 1].pose.position.y);
   target_point.getOrigin().setZ(planned_path[i - 1].pose.position.z);
-  target_point.setRotation(tf::Quaternion(0.0, 0.0, 0.0, 1.0));
+  target_point.setRotation(tf::Quaternion(planned_path[i - 1].pose.orientation.x, //tf::Quaternion(0.0, 0.0, 0.0, 1.0)
+                                          planned_path[i - 1].pose.orientation.y,
+                                          planned_path[i - 1].pose.orientation.z,
+                                          planned_path[i - 1].pose.orientation.w));
 
   if (i == planned_path.size()) {
     return true;

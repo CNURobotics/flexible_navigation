@@ -59,10 +59,17 @@ FollowTopic::FollowTopic(tf::TransformListener &tf)
                    std::string("middle_costmap"));
   private_nh.param(costmap_name_ + "/robot_base_frame", robot_base_frame_,
                    std::string("base_link"));
-  private_nh.param(costmap_name_ + "/reference_frame", global_frame_,
-                   std::string("/odom"));
+  private_nh.param(costmap_name_ + "/global_frame", global_frame_,
+                   std::string("odom"));
   private_nh.param("planner_frequency", planner_frequency_, 1.0);
   private_nh.param("distance_threshold", distance_threshold_, 5.0);
+
+  // make sure that we set the frames appropriately based on the tf_prefix
+  ros::NodeHandle prefix_nh;
+  std::string tf_prefix = tf::getPrefixParam(prefix_nh);
+  global_frame_ = tf::resolve(tf_prefix, global_frame_);
+  robot_base_frame_ = tf::resolve(tf_prefix, robot_base_frame_);
+
 
   costmap_ = new costmap_2d::Costmap2DROS(costmap_name_, tf);
   costmap_->pause();

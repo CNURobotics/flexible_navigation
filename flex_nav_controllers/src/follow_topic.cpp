@@ -57,7 +57,14 @@ FollowTopic::FollowTopic(tf::TransformListener &tf)
   private_nh.param("planner", planner,
                    std::string("base_local_planner/TrajectoryPlannerROS"));
   private_nh.param("controller_frequency", controller_frequency_, 5.0);
-  private_nh.param("robot_frame", robot_frame_, std::string("base_footprint"));
+  private_nh.param("costmap_name", costmap_name_, std::string("local_costmap"));
+  private_nh.param(costmap_name_ + "/robot_base_frame", robot_base_frame_,
+                  std::string("base_footprint"));
+
+  // make sure that we set the frames appropriately based on the tf_prefix
+  ros::NodeHandle prefix_nh;
+  std::string tf_prefix = tf::getPrefixParam(prefix_nh);
+  robot_base_frame_ = tf::resolve(tf_prefix, robot_base_frame_);
 
   vel_pub_ = nh.advertise<geometry_msgs::TwistStamped>("cmd_vel", 1);
 
@@ -175,7 +182,7 @@ void FollowTopic::execute(
                 current_path_->header.seq);
 
       if (planner_->isGoalReached()) {
-        ROS_INFO("Reached goal");
+        ROS_INFO("[%s] Success - reached the goal!", name_.c_str());
         result.code = flex_nav_common::FollowTopicResult::SUCCESS;
         result.pose = location.pose;
 
@@ -189,7 +196,7 @@ void FollowTopic::execute(
 
       if (planner_->computeVelocityCommands(cmd_vel)) {
         cur_twist.header.stamp = ros::Time::now();
-        cur_twist.header.frame_id = robot_frame_;
+        cur_twist.header.frame_id = robot_base_frame_;
         cur_twist.twist = cmd_vel;
 
         vel_pub_.publish(cur_twist);
