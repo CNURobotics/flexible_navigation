@@ -1,0 +1,14 @@
+path: flex_nav_flexbe_states.recovery_state
+class: RecoveryState
+
+import_only: true
+
+params:
+    module_name:  'nav2_msgs'
+    class_name:  'Wait'
+    goal_data:  {'time', rclpy.duration.Duration(seconds=2.0)}
+    topic:  'recovery_topic'
+    timeout:  5.0
+
+outcome:
+    done

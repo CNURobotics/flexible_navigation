@@ -35,95 +35,214 @@
 
 #include <flex_nav_planners/get_path.h>
 
-#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/msg/twist.h>
 #include <vector>
-
-using costmap_2d::NO_INFORMATION;
+#include <exception>
+#include "nav2_util/costmap.hpp"
 
 namespace flex_nav {
-GetPath::GetPath(tf2_ros::Buffer &tf)
-    : tf_(tf), gp_server_(NULL), costmap_(NULL),
-      loader_("nav_core", "nav_core::BaseGlobalPlanner"),
-      name_(ros::this_node::getName()) {
-  ros::NodeHandle private_nh("~");
-  ros::NodeHandle nh;
+  GetPath::GetPath()
+      :  nav2_util::LifecycleNode("get_path", "", true),
+        gp_loader_("nav2_core", "nav2_core::GlobalPlanner"),
+        default_id_{"GridBased"},
+        default_type_{"nav2_navfn_planner/NavfnPlanner"},
+        costmap_(nullptr),
+        name_("get_path")
+        {
 
-  gp_server_ = new GetPathActionServer(
-      nh, name_, boost::bind(&GetPath::execute, this, _1), false);
-  cc_server_ = new ClearCostmapActionServer(
-      nh, name_ + "/clear_costmap",
-      boost::bind(&GetPath::clear_costmap, this, _1), false);
+    using namespace std::placeholders;
 
-  std::string planner;
-  private_nh.param("planner", planner, std::string("navfn/NavfnROS"));
-  private_nh.param("costmap/robot_base_frame", robot_base_frame_,
-                   std::string("base_link"));
-  private_nh.param("costmap/global_frame", global_frame_, std::string("/map"));
-  private_nh.param("planner_frequency", planner_frequency_, 1.0);
+    declare_parameter("planner_plugin", default_id_);
+    declare_parameter("expected_planner_frequency", 1.0);
 
-  costmap_ = new costmap_2d::Costmap2DROS("global_costmap", tf);
-  costmap_->pause();
+    costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
+      "global_costmap", std::string{get_namespace()}, "global_costmap");
 
-  try {
-    planner_ = loader_.createInstance(planner);
-    planner_->initialize(loader_.getName(planner), costmap_);
-    ROS_INFO("[%s] Created instance of %s planner", name_.c_str(),
-             planner.c_str());
-  } catch (const pluginlib::PluginlibException &ex) {
-    ROS_ERROR("[%s] Failed to create the %s planner: %s", name_.c_str(),
-              planner.c_str(), ex.what());
-    exit(1);
+    costmap_thread_ = std::make_unique<nav2_util::NodeThread>(costmap_ros_);
   }
 
-  costmap_->start();
-  gp_server_->start();
-  cc_server_->start();
-}
+  GetPath::~GetPath() {
+    planner_.reset();
+    costmap_thread_.reset();
+  }
 
-GetPath::~GetPath() {
-  gp_server_->shutdown();
-  cc_server_->shutdown();
-}
+  nav2_util::CallbackReturn
+  GetPath::on_configure(const rclcpp_lifecycle::State & state)
+  {
+    name_ = this->get_name();
+    gp_server_ = std::make_unique<GetPathActionServer>(
+      rclcpp_node_,
+      name_,
+      std::bind(&GetPath::execute, this));
 
-void GetPath::execute(const flex_nav_common::GetPathGoalConstPtr &goal) {
-  geometry_msgs::PoseStamped start;
-  costmap_->getRobotPose(start);
+    cc_server_ = std::make_unique<ClearCostmapActionServer>(
+      rclcpp_node_,
+      name_ + "/clear_costmap",
+      std::bind(&GetPath::clear_costmap, this));
 
-  ROS_INFO("[%s] Current location (%f, %f)", name_.c_str(),
-           start.pose.position.x, start.pose.position.y);
-  ROS_INFO("[%s] Generating a path to (%f, %f), qz=%f", name_.c_str(),
-           goal->pose.pose.position.x, goal->pose.pose.position.y,
-           goal->pose.pose.orientation.z);
+    RCLCPP_INFO(get_logger(), "Configuring");
 
-  flex_nav_common::GetPathFeedback feedback;
-  feedback.location = start.pose;
-  feedback.goal = goal->pose.pose;
-  gp_server_->publishFeedback(feedback);
+    costmap_ros_->on_configure(state);
+    costmap_ = costmap_ros_->getCostmap();
 
-  std::vector<geometry_msgs::PoseStamped> plan;
-  flex_nav_common::GetPathResult result;
-  result.plan.header.stamp = ros::Time::now();
-  if (planner_->makePlan(start, goal->pose, plan)) {
-    result.plan.poses = plan;
-    if (!plan.empty()) {
-      result.code = flex_nav_common::GetPathResult::SUCCESS;
-      gp_server_->setSucceeded(result, "Found a path");
-    } else {
-      result.code = flex_nav_common::GetPathResult::EMPTY;
-      gp_server_->setAborted(result, "Empty path");
+    RCLCPP_DEBUG(get_logger(), "Costmap size: %d,%d",
+      costmap_->getSizeInCellsX(), costmap_->getSizeInCellsY());
+
+    tf_ = costmap_ros_->getTfBuffer();
+
+    get_parameter("planner_plugin", planner_id_);
+    if (planner_id_ == default_id_) {
+      declare_parameter(default_id_ + ".plugin", default_type_);
     }
-  } else {
-    result.code = flex_nav_common::GetPathResult::FAILURE;
-    gp_server_->setAborted(result, "Failed to make plan");
+
+    auto node = shared_from_this();
+
+    RCLCPP_INFO(get_logger(), "Costmap global frame = " + costmap_ros_->getGlobalFrameID());
+    try {
+      planner_type_ = nav2_util::get_plugin_type_param(node, planner_id_);
+      planner_ = gp_loader_.createUniqueInstance(planner_type_);
+      RCLCPP_INFO(get_logger(), "Created global planner plugin %s of type %s",
+        planner_id_.c_str(), planner_type_.c_str());
+      planner_->configure(node, planner_id_, tf_, costmap_ros_);
+    } catch (const pluginlib::PluginlibException & ex) {
+      RCLCPP_FATAL(get_logger(), "Failed to create global planner. Exception: %s",
+        ex.what());
+      return nav2_util::CallbackReturn::FAILURE;
+    }
+
+    double expected_planner_frequency;
+    get_parameter("expected_planner_frequency", expected_planner_frequency);
+    if (expected_planner_frequency > 0) {
+      max_planner_duration_ = 1 / expected_planner_frequency;
+    } else {
+      RCLCPP_WARN(get_logger(),
+        "The expected planner frequency parameter is %.4f Hz. The value should to be greater"
+        " than 0.0 to turn on duration overrrun warning messages", expected_planner_frequency);
+      max_planner_duration_ = 0.0;
+    }
+
+    plan_publisher_ = create_publisher<nav_msgs::msg::Path>(name_ + "/plan", 1);
+
+    return nav2_util::CallbackReturn::SUCCESS;
   }
-}
 
-void GetPath::clear_costmap(
-    const flex_nav_common::ClearCostmapGoalConstPtr &goal) {
-  costmap_->resetLayers();
+  nav2_util::CallbackReturn
+  GetPath::on_activate(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Activating");
+    plan_publisher_->on_activate();
+    gp_server_->activate();
+    cc_server_->activate();
+    costmap_ros_->on_activate(state);
 
-  flex_nav_common::ClearCostmapResult result;
-  result.code = flex_nav_common::ClearCostmapResult::SUCCESS;
-  cc_server_->setSucceeded(result, "Success");
-}
+    planner_->activate();
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  GetPath::on_deactivate(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Deactivating");
+    plan_publisher_->on_deactivate();
+    gp_server_->deactivate();
+    cc_server_->deactivate();
+    costmap_ros_->on_deactivate(state);
+
+    planner_->deactivate();
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  GetPath::on_cleanup(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Cleaning up");
+    plan_publisher_.reset();
+    gp_server_.reset();
+    cc_server_.reset();
+    tf_.reset();
+    costmap_ros_->on_cleanup(state);
+
+    planner_->cleanup();
+    costmap_ = nullptr;
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  GetPath::on_shutdown(const rclcpp_lifecycle::State &)
+  {
+    RCLCPP_INFO(get_logger(), "Shutting down");
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  void GetPath::execute() {
+    auto goal = gp_server_->get_current_goal();
+
+    RCLCPP_INFO(get_logger(), " [%s] Received goal", name_.c_str());
+    if (gp_server_ == nullptr || !gp_server_->is_server_active()) {
+      RCLCPP_DEBUG(get_logger(), "Action server unavailable or inactive. Stopping.");
+      return;
+    }
+
+    if (gp_server_->is_cancel_requested()) {
+      RCLCPP_INFO(get_logger(), "Goal was canceled. Canceling planning action.");
+      gp_server_->terminate_all();
+      return;
+    }
+
+    // Get current position of the robot
+    geometry_msgs::msg::PoseStamped start_pose;
+    if (!costmap_ros_->getRobotPose(start_pose)) {
+      gp_server_->terminate_current();
+      return;
+    }
+
+    if (gp_server_->is_cancel_requested()) {
+      goal = gp_server_->accept_pending_goal();
+    }
+
+    RCLCPP_INFO(get_logger(), "[%s] Current location (%f, %f)", name_.c_str(),
+      start_pose.pose.position.x, start_pose.pose.position.y);
+
+    RCLCPP_INFO(get_logger(), "[%s] Generating a path to (%f, %f), qz=%f", name_.c_str(),
+      goal->pose.pose.position.x, goal->pose.pose.position.y,
+      goal->pose.pose.orientation.z);
+
+    auto feedback = std::make_shared<GetPathAction::Feedback>();
+    feedback->location = start_pose.pose;
+    feedback->goal = goal->pose.pose;
+    gp_server_->publish_feedback(feedback);
+
+    std::shared_ptr<flex_nav_common::action::GetPath::Result> result =
+      std::make_shared<flex_nav_common::action::GetPath::Result>();
+    result->plan.header.stamp = steady_clock_.now();
+
+    // Create a plan from the current robot position to given goal
+    nav_msgs::msg::Path path = planner_->createPlan(start_pose, goal->pose);
+    if (!path.poses.empty()) {
+      if (path.header.frame_id == "") {
+        RCLCPP_WARN(get_logger(), "Path frame id is empty");
+      }
+
+      result->plan = path;
+      result->code = flex_nav_common::action::GetPath::Result::SUCCESS;
+      plan_publisher_->publish(std::move(path));
+      gp_server_->succeeded_current(result);
+    }
+    else {
+      result->code = flex_nav_common::action::GetPath::Result::FAILURE;
+      gp_server_->terminate_current(result);
+    }
+  }
+
+  void GetPath::clear_costmap() {
+    auto goal = cc_server_->get_current_goal();
+    costmap_ros_->resetLayers();
+    std::shared_ptr<flex_nav_common::action::ClearCostmap::Result> result =
+      std::make_shared<flex_nav_common::action::ClearCostmap::Result>();
+    result->code = flex_nav_common::action::ClearCostmap::Result::SUCCESS;
+    cc_server_->succeeded_current(result);
+  }
 }

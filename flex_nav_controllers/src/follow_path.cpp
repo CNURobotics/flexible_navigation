@@ -34,160 +34,466 @@
  ******************************************************************************/
 
 #include <flex_nav_controllers/follow_path.h>
-
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/Twist.h>
-#include <geometry_msgs/TwistStamped.h>
-
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-
+#include "nav_2d_utils/conversions.hpp"
+#include "nav_2d_utils/tf_help.hpp"
+#include "nav2_core/exceptions.hpp"
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
+#include "rclcpp/rclcpp.hpp"
+#include <exception>
 
 namespace flex_nav {
-FollowPath::FollowPath(tf2_ros::Buffer &tf)
-    : tf_(tf), fp_server_(NULL), costmap_(NULL),
-      loader_("nav_core", "nav_core::BaseLocalPlanner"), running_(false),
-      name_(ros::this_node::getName()) {
-  ros::NodeHandle private_nh("~");
-  ros::NodeHandle nh;
+  FollowPath::FollowPath()
+      : nav2_util::LifecycleNode("follow_path", "", true),
+        progress_checker_loader_("nav2_core", "nav2_core::ProgressChecker"),
+        default_progress_checker_id_{"progress_checker"},
+        default_progress_checker_type_{"nav2_controller::SimpleProgressChecker"},
+        goal_checker_loader_("nav2_core", "nav2_core::GoalChecker"),
+        default_goal_checker_id_{"goal_checker"},
+        default_goal_checker_type_{"nav2_controller::SimpleGoalChecker"},
+        lp_loader_("nav2_core", "nav2_core::Controller"),
+        default_id_{"FollowPath"},
+        default_type_{"dwb_core::DWBLocalPlanner"},
+        running_(false),
+        name_("follow_path")
+        {
+    using namespace std::placeholders;
 
-  fp_server_ = new FollowPathActionServer(
-      nh, name_, boost::bind(&FollowPath::execute, this, _1), false);
-  cc_server_ = new ClearCostmapActionServer(
-      nh, name_ + "/clear_costmap",
-      boost::bind(&FollowPath::clear_costmap, this, _1), false);
+    declare_parameter("controller_frequency", 20.0);
+    declare_parameter("progress_checker_plugin", default_progress_checker_id_);
+    declare_parameter("goal_checker_plugin", default_goal_checker_id_);
+    declare_parameter("controller_plugin", default_id_);
+    declare_parameter("min_x_velocity_threshold", rclcpp::ParameterValue(0.0001));
+    declare_parameter("min_y_velocity_threshold", rclcpp::ParameterValue(0.0001));
+    declare_parameter("min_theta_velocity_threshold", rclcpp::ParameterValue(0.0001));
+    declare_parameter("velocity_publisher", "");
+    declare_parameter("velocity_stamp_publisher", "");
 
-  std::string planner;
-  private_nh.param("planner", planner,
-                   std::string("base_local_planner/TrajectoryPlannerROS"));
-  private_nh.param("controller_frequency", controller_frequency_, 5.0);
-  private_nh.param("robot_frame", robot_frame_, std::string("base_footprint"));
+    costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
+      "local_costmap", std::string{get_namespace()}, "local_costmap");
 
-  vel_pub_ = nh.advertise<geometry_msgs::TwistStamped>("cmd_vel", 1);
-
-  costmap_ = new costmap_2d::Costmap2DROS("local_costmap", tf_);
-  costmap_->pause();
-
-  try {
-    planner_ = loader_.createInstance(planner);
-    planner_->initialize(loader_.getName(planner), &tf_, costmap_);
-    ROS_INFO("[%s] Created instance of %s planner", name_.c_str(),
-             planner.c_str());
-  } catch (const pluginlib::PluginlibException &ex) {
-    ROS_ERROR("[%s] Failed to create the %s planner: %s", name_.c_str(),
-              planner.c_str(), ex.what());
-    exit(1);
+    costmap_thread_ = std::make_unique<nav2_util::NodeThread>(costmap_ros_);
   }
 
-  costmap_->start();
-  fp_server_->start();
-  cc_server_->start();
-  ros::spin();
-}
-
-FollowPath::~FollowPath() {
-  fp_server_->shutdown();
-  cc_server_->shutdown();
-}
-
-void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
-  ros::Rate r(controller_frequency_);
-  geometry_msgs::PoseStamped location;
-  geometry_msgs::PoseStamped pose;
-
-  while (running_) {
-    ROS_WARN_THROTTLE(0.25, "[%s] Waiting for lock", name_.c_str());
-    r.sleep();
+  FollowPath::~FollowPath() {
+    costmap_thread_.reset();
+    odom_sub_.reset();
+    controller_.reset();
   }
 
-  if (!planner_->setPlan(goal->path.poses)) {
-    costmap_->getRobotPose(pose);
+  nav2_util::CallbackReturn
+  FollowPath::on_configure(const rclcpp_lifecycle::State & state)
+  {
+    name_ = this->get_name();
+    fp_server_ = std::make_unique<FollowPathActionServer>(
+      rclcpp_node_,
+      name_,
+      std::bind(&FollowPath::execute, this));
 
-    flex_nav_common::FollowPathResult abort;
-    abort.code =
-        flex_nav_common::FollowPathResult::FAILURE; // Could not set plan
-    abort.pose = location.pose;
+    cc_server_ = std::make_unique<ClearCostmapActionServer>(
+      rclcpp_node_,
+      name_ + "/clear_costmap",
+      std::bind(&FollowPath::clear_costmap, this));
 
-    fp_server_->setAborted(abort, "Could not set plan");
+    auto node = shared_from_this();
+
+    RCLCPP_INFO(get_logger(), "Configuring controller interface");
+
+    get_parameter("progress_checker_plugin", progress_checker_id_);
+    if (progress_checker_id_ == default_progress_checker_id_) {
+      nav2_util::declare_parameter_if_not_declared(
+        node, default_progress_checker_id_ + ".plugin",
+        rclcpp::ParameterValue(default_progress_checker_type_));
+    }
+    get_parameter("goal_checker_plugin", goal_checker_id_);
+    if (goal_checker_id_ == default_goal_checker_id_) {
+      nav2_util::declare_parameter_if_not_declared(
+        node, default_goal_checker_id_ + ".plugin",
+        rclcpp::ParameterValue(default_goal_checker_type_));
+    }
+
+    get_parameter("controller_plugin", controller_id_);
+    if (controller_id_ == default_id_) {
+      nav2_util::declare_parameter_if_not_declared(node, default_id_ + ".plugin",
+        rclcpp::ParameterValue(default_type_));
+    }
+
+    get_parameter("controller_frequency", controller_frequency_);
+    get_parameter("min_x_velocity_threshold", min_x_velocity_threshold_);
+    get_parameter("min_y_velocity_threshold", min_y_velocity_threshold_);
+    get_parameter("min_theta_velocity_threshold", min_theta_velocity_threshold_);
+    get_parameter("velocity_publisher", vel_publisher_name_);
+    get_parameter("velocity_stamp_publisher", vel_stamp_publisher_name_);
+    RCLCPP_INFO(get_logger(), "Controller frequency set to %.4fHz", controller_frequency_);
+
+    costmap_ros_->on_configure(state);
+
+    try {
+      progress_checker_type_ = nav2_util::get_plugin_type_param(node, progress_checker_id_);
+      progress_checker_ = progress_checker_loader_.createUniqueInstance(progress_checker_type_);
+      RCLCPP_INFO(get_logger(), "Created progress_checker : %s of type %s",
+        progress_checker_id_.c_str(), progress_checker_type_.c_str());
+      progress_checker_->initialize(node, progress_checker_id_);
+    } catch (const pluginlib::PluginlibException & ex) {
+      RCLCPP_FATAL(get_logger(), "Failed to create progress_checker. Exception: %s",
+        ex.what());
+      return nav2_util::CallbackReturn::FAILURE;
+    }
+
+    try {
+      goal_checker_type_ = nav2_util::get_plugin_type_param(node, goal_checker_id_);
+      goal_checker_ = goal_checker_loader_.createUniqueInstance(goal_checker_type_);
+      RCLCPP_INFO(get_logger(), "Created goal_checker : %s of type %s",
+        goal_checker_id_.c_str(), goal_checker_type_.c_str());
+      goal_checker_->initialize(node, goal_checker_id_);
+    } catch (const pluginlib::PluginlibException & ex) {
+      RCLCPP_FATAL(get_logger(), "Failed to create goal_checker. Exception: %s",
+        ex.what());
+      return nav2_util::CallbackReturn::FAILURE;
+    }
+
+    try {
+      controller_type_ = nav2_util::get_plugin_type_param(node, controller_id_);
+      controller_ = lp_loader_.createUniqueInstance(controller_type_);
+      RCLCPP_INFO(get_logger(), "Created controller : %s of type %s",
+        controller_id_.c_str(), controller_type_.c_str());
+      controller_->configure(node, controller_id_, costmap_ros_->getTfBuffer(), costmap_ros_);
+    } catch (const pluginlib::PluginlibException & ex) {
+      RCLCPP_FATAL(get_logger(), "Failed to create controller. Exception: %s",
+        ex.what());
+      return nav2_util::CallbackReturn::FAILURE;
+    }
+
+    odom_sub_ = std::make_unique<nav_2d_utils::OdomSubscriber>(node);
+
+    if (vel_publisher_name_ != "") {
+      vel_publisher_ = create_publisher<geometry_msgs::msg::Twist>(vel_publisher_name_, 1);
+    }
+
+    if (vel_stamp_publisher_name_ != "") {
+      vel_stamp_publisher_ = create_publisher<geometry_msgs::msg::TwistStamped>(vel_stamp_publisher_name_, 10);
+    }
+
+    if (vel_publisher_name_ == "" && vel_stamp_publisher_name_ == "") {
+      vel_publisher_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 1);
+    }
+
+    return nav2_util::CallbackReturn::SUCCESS;
   }
 
-  ROS_INFO("[%s] Executing new path", name_.c_str());
+  nav2_util::CallbackReturn
+  FollowPath::on_activate(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Activating");
+    controller_->activate();
+    costmap_ros_->on_activate(state);
+    fp_server_->activate();
+    cc_server_->activate();
 
-  running_ = true;
-  ros::NodeHandle n;
-  while (running_ && n.ok() && !fp_server_->isNewGoalAvailable() &&
-         !fp_server_->isPreemptRequested()) {
-    costmap_->getRobotPose(pose);
+    if (vel_publisher_name_ != "") {
+      vel_publisher_->on_activate();
+    }
 
-    if (planner_->isGoalReached()) {
-      ROS_INFO("[%s] Success!", name_.c_str());
+    if (vel_stamp_publisher_name_ != "") {
+      vel_stamp_publisher_->on_activate();
+    }
 
-      flex_nav_common::FollowPathResult result;
-      result.code = flex_nav_common::FollowPathResult::SUCCESS;
-      result.pose = location.pose;
+    if (vel_publisher_name_ == "" && vel_stamp_publisher_name_ == "") {
+      vel_publisher_->on_activate();
+    }
 
-      fp_server_->setSucceeded(result, "Reached the goal!");
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowPath::on_deactivate(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Deactivating");
+    controller_->deactivate();
+    fp_server_->deactivate();
+    cc_server_->deactivate();
+    costmap_ros_->on_deactivate(state);
+
+    publishZeroVelocity();
+
+    if (vel_publisher_name_ != "") {
+      vel_publisher_->on_deactivate();
+    }
+
+    if (vel_stamp_publisher_name_ != "") {
+      vel_stamp_publisher_->on_deactivate();
+    }
+
+    if (vel_publisher_name_ == "" && vel_stamp_publisher_name_ == "") {
+      vel_publisher_->on_deactivate();
+    }
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowPath::on_cleanup(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Cleaning up");
+    controller_->cleanup();
+    costmap_ros_->on_cleanup(state);
+
+    fp_server_.reset();
+    cc_server_.reset();
+    odom_sub_.reset();
+    vel_publisher_.reset();
+    vel_stamp_publisher_.reset();
+    goal_checker_->reset();
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowPath::on_shutdown(const rclcpp_lifecycle::State &)
+  {
+    RCLCPP_INFO(get_logger(), "Shutting down");
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  void FollowPath::publishZeroVelocity()
+  {
+    geometry_msgs::msg::TwistStamped velocity = geometry_msgs::msg::TwistStamped();
+    velocity.twist.angular.x = 0;
+    velocity.twist.angular.y = 0;
+    velocity.twist.angular.z = 0;
+    velocity.twist.linear.x = 0;
+    velocity.twist.linear.y = 0;
+    velocity.twist.linear.z = 0;
+    velocity.header.frame_id = costmap_ros_->getBaseFrameID();
+    velocity.header.stamp = now();
+
+    if (vel_publisher_name_ != "") {
+      vel_publisher_->publish(velocity.twist);
+    }
+
+    if (vel_stamp_publisher_name_ != "") {
+      vel_stamp_publisher_->publish(velocity);
+    }
+
+    if (vel_publisher_name_ == "" && vel_stamp_publisher_name_ == "") {
+      vel_publisher_->publish(velocity.twist);
+    }
+  }
+
+  void FollowPath::setPlannerPath(const nav_msgs::msg::Path & path)
+  {
+    if (path.poses.empty()) {
+      throw nav2_core::PlannerException("Invalid path, Path is empty.");
+    }
+    controller_->setPlan(path);
+
+    auto end_pose = path.poses.back();
+    end_pose.header.frame_id = path.header.frame_id;
+    rclcpp::Duration tolerance(costmap_ros_->getTransformTolerance() * 1e9);
+    nav_2d_utils::transformPose(
+      costmap_ros_->getTfBuffer(), costmap_ros_->getGlobalFrameID(),
+      end_pose, end_pose, tolerance);
+    goal_checker_->reset();
+
+    RCLCPP_DEBUG(get_logger(), "Path end point is (%.2f, %.2f)",
+      end_pose.pose.position.x, end_pose.pose.position.y);
+    end_pose_ = end_pose.pose;
+  }
+
+  void FollowPath::computeAndPublishVelocity()
+  {
+    geometry_msgs::msg::PoseStamped pose;
+
+    if (!getRobotPose(pose)) {
+      throw nav2_core::PlannerException("Failed to obtain robot pose");
+    }
+
+    if (!progress_checker_->check(pose)) {
+      throw nav2_core::PlannerException("Failed to make progress");
+    }
+
+    nav_2d_msgs::msg::Twist2D twist = getThresholdedTwist(odom_sub_->getTwist());
+
+    auto cmd_vel_2d =
+      controller_->computeVelocityCommands(
+      pose,
+      nav_2d_utils::twist2Dto3D(twist));
+
+    publishVelocity(cmd_vel_2d, pose);
+  }
+
+  void FollowPath::updateGlobalPath()
+  {
+    if (fp_server_->is_cancel_requested()) {
+      RCLCPP_INFO(get_logger(), "Passing new path to controller.");
+      auto goal = fp_server_->accept_pending_goal();
+      std::string current_controller;
+      setPlannerPath(goal->path);
+    }
+  }
+
+  void FollowPath::publishVelocity(const geometry_msgs::msg::TwistStamped & velocity, geometry_msgs::msg::PoseStamped robotPose)
+  {
+    auto cmd_vel = std::make_unique<geometry_msgs::msg::Twist>(velocity.twist);
+    auto cmd_vel_stamp = std::make_unique<geometry_msgs::msg::TwistStamped>(velocity);
+
+    if (vel_stamp_publisher_name_ != "") {
+      if (vel_stamp_publisher_->is_activated() && this->count_subscribers(vel_stamp_publisher_->get_topic_name()) > 0)
+      {
+        vel_stamp_publisher_->publish(std::move(cmd_vel_stamp));
+      }
+    }
+
+    if (vel_publisher_name_ != "" || (vel_publisher_name_ == "" && vel_stamp_publisher_name_ == "")) {
+      if (vel_publisher_->is_activated() && this->count_subscribers(vel_publisher_->get_topic_name()) > 0)
+      {
+        vel_publisher_->publish(std::move(cmd_vel));
+      }
+    }
+
+    auto feedback = std::make_shared<FollowPathAction::Feedback>();
+
+    feedback->twist = velocity.twist;
+    feedback->pose = robotPose.pose;
+
+    fp_server_->publish_feedback(feedback);
+  }
+
+  bool FollowPath::isGoalReached()
+  {
+    geometry_msgs::msg::PoseStamped pose;
+
+    if (!getRobotPose(pose)) {
+      return false;
+    }
+
+    nav_2d_msgs::msg::Twist2D twist = odom_sub_->getTwist();
+    geometry_msgs::msg::Twist velocity = nav_2d_utils::twist2Dto3D(twist);
+    return goal_checker_->isGoalReached(pose.pose, end_pose_, velocity);
+  }
+
+  bool FollowPath::getRobotPose(geometry_msgs::msg::PoseStamped & pose)
+  {
+    geometry_msgs::msg::PoseStamped current_pose;
+    if (!costmap_ros_->getRobotPose(current_pose)) {
+      return false;
+    }
+    pose = current_pose;
+    return true;
+  }
+
+  void FollowPath::execute() {
+    auto goal = fp_server_->get_current_goal();
+    geometry_msgs::msg::PoseStamped location;
+    rclcpp::Rate r(controller_frequency_);
+    try {
+      while (running_) {
+        RCLCPP_WARN(get_logger(), "[%s] Waiting for lock", name_.c_str());
+        r.sleep();
+      }
+
+      // If invalid path then terminate_current goal
+      if (goal->path.poses.empty()) {
+        RCLCPP_WARN(get_logger(), "Got path with no poses");
+        std::shared_ptr<flex_nav_common::action::FollowPath::Result> abort =
+          std::make_shared<flex_nav_common::action::FollowPath::Result>();
+
+        abort->code = flex_nav_common::action::FollowPath::Result::FAILURE; // Could not set plan
+
+        costmap_ros_->getRobotPose(location);
+        abort->pose = location.pose;
+
+        fp_server_->terminate_current(abort);
+        return;
+      }
+
+      // Plan path to goal
+      setPlannerPath(goal->path);
+      progress_checker_->reset();
+
+      running_ = true;
+      while (running_ && rclcpp::ok()) {
+        if (fp_server_ == nullptr || !fp_server_->is_server_active()) {
+            RCLCPP_INFO(get_logger(), "Action server unavailable or inactive. Stopping.");
+            std::shared_ptr<flex_nav_common::action::FollowPath::Result> abort =
+              std::make_shared<flex_nav_common::action::FollowPath::Result>();
+            abort->code = flex_nav_common::action::FollowPath::Result::FAILURE; // Could not set plan
+            costmap_ros_->getRobotPose(location);
+            abort->pose = location.pose;
+            fp_server_->terminate_current(abort);
+            running_ = false;
+            return;
+        }
+
+        if (fp_server_->is_cancel_requested()) {
+          RCLCPP_INFO(get_logger(), "Goal was canceled. Stopping the robot.");
+          fp_server_->terminate_all();
+          publishZeroVelocity();
+
+          std::shared_ptr<flex_nav_common::action::FollowPath::Result> abort =
+            std::make_shared<flex_nav_common::action::FollowPath::Result>();
+
+          abort->code = flex_nav_common::action::FollowPath::Result::CANCEL; // Could not set plan
+
+          costmap_ros_->getRobotPose(location);
+          abort->pose = location.pose;
+
+          fp_server_->terminate_current(abort);
+
+          running_ = false;
+          return;
+        }
+
+        updateGlobalPath();
+
+        computeAndPublishVelocity();
+
+        if (isGoalReached()) {
+          RCLCPP_INFO(get_logger(), "[%s] Success!", name_.c_str());
+          std::shared_ptr<flex_nav_common::action::FollowPath::Result> result =
+            std::make_shared<flex_nav_common::action::FollowPath::Result>();
+          result->code = flex_nav_common::action::FollowPath::Result::SUCCESS;
+
+          costmap_ros_->getRobotPose(location);
+          result->pose = location.pose;
+
+          fp_server_->succeeded_current(result);
+          running_ = false;
+
+          publishZeroVelocity();
+          break;
+        }
+
+        if (!r.sleep()) {
+          RCLCPP_WARN(get_logger(), "Control loop missed its desired rate of %.4fHz",
+            controller_frequency_);
+        }
+      }
+    }
+    catch (nav2_core::PlannerException & e) {
+      RCLCPP_ERROR(get_logger(), e.what());
+      publishZeroVelocity();
+      std::shared_ptr<flex_nav_common::action::FollowPath::Result> abort =
+        std::make_shared<flex_nav_common::action::FollowPath::Result>();
+
+      abort->code = flex_nav_common::action::FollowPath::Result::FAILURE; // Could not set plan
+      costmap_ros_->getRobotPose(location);
+      abort->pose = location.pose;
+
+      fp_server_->terminate_current(abort);
       running_ = false;
       return;
     }
-
-    geometry_msgs::Twist cmd_vel;
-    if (planner_->computeVelocityCommands(cmd_vel)) {
-      geometry_msgs::TwistStamped result;
-      result.header.stamp = ros::Time::now();
-      result.header.frame_id = robot_frame_;
-      result.twist = cmd_vel;
-
-      vel_pub_.publish(result);
-
-      flex_nav_common::FollowPathFeedback feedback;
-      feedback.twist = cmd_vel;
-      feedback.pose = location.pose;
-
-      fp_server_->publishFeedback(feedback);
-    } else {
-      ROS_ERROR("[%s] Failed to get a twist from the local planner",
-                name_.c_str());
-
-      flex_nav_common::FollowPathResult abort;
-      abort.code = flex_nav_common::FollowPathResult::FAILURE; // Planner failed
-      abort.pose = location.pose;
-
-      fp_server_->setAborted(abort, "Planner failed");
-      running_ = false;
-      return;
-    }
-
-    r.sleep();
   }
 
-  costmap_->getRobotPose(pose);
-
-  if (fp_server_->isPreemptRequested()) {
-    ROS_WARN("[%s] Preempting goal...", name_.c_str());
-
-    flex_nav_common::FollowPathResult abort;
-    abort.code = flex_nav_common::FollowPathResult::PREEMPT; // Goal preempted
-    abort.pose = location.pose;
-
-    fp_server_->setPreempted(abort, "Goal preempted");
-  } else {
-    ROS_WARN("[%s] Canceling goal ...", name_.c_str());
-
-    flex_nav_common::FollowPathResult abort;
-    abort.code = flex_nav_common::FollowPathResult::PREEMPT; // Goal canceled
-    abort.pose = location.pose;
-
-    fp_server_->setPreempted(abort, "Goal canceled");
+  void FollowPath::clear_costmap() {
+    auto goal = cc_server_->get_current_goal();
+    costmap_ros_->resetLayers();
+    std::shared_ptr<flex_nav_common::action::ClearCostmap::Result> result =
+      std::make_shared<flex_nav_common::action::ClearCostmap::Result>();
+    result->code = flex_nav_common::action::ClearCostmap::Result::SUCCESS;
+    cc_server_->succeeded_current(result);
   }
-  running_ = false;
-}
-
-void FollowPath::clear_costmap(
-    const flex_nav_common::ClearCostmapGoalConstPtr &goal) {
-  costmap_->resetLayers();
-
-  flex_nav_common::ClearCostmapResult result;
-  result.code = flex_nav_common::ClearCostmapResult::SUCCESS;
-  cc_server_->setSucceeded(result, "Success");
-}
 }

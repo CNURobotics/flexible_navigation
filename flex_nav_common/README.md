@@ -1,7 +1,7 @@
 Flexible Navigation Common Data
 ===============================
 
-The Common Data package contains all of the [actionlib] messages used with every
+The Common Data package contains all of the [ROS2 Actions] messages used with every
 node.
 
-[actionlib]: http://wiki.ros.org/actionlib
+[ROS2 Actions]: http://design.ros2.org/articles/actions.html

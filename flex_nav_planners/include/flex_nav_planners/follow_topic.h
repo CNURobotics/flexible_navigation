@@ -48,78 +48,130 @@
 #ifndef FLEX_PLANNER_FOLLOW_TOPIC_H
 #define FLEX_PLANNER_FOLLOW_TOPIC_H
 
-#include <ros/ros.h>
-#include <tf2_ros/buffer.h>
-
-#include <actionlib/server/simple_action_server.h>
-#include <flex_nav_common/ClearCostmapAction.h>
-#include <flex_nav_common/FollowTopicAction.h>
-#include <nav_msgs/Path.h>
-
-#include <costmap_2d/costmap_2d.h>
-#include <costmap_2d/costmap_2d_ros.h>
-#include <nav_core/base_global_planner.h>
-#include <nav_core/base_local_planner.h>
-
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "tf2_ros/buffer.h"
+#include "flex_nav_common/action/clear_costmap.hpp"
+#include "flex_nav_common/action/follow_topic.hpp"
+#include "nav_msgs/msg/path.hpp"
+#include "nav2_costmap_2d/costmap_2d.hpp"
+#include "nav2_costmap_2d/costmap_2d_ros.hpp"
+#include "nav2_core/global_planner.hpp"
+#include "nav2_navfn_planner/navfn_planner.hpp"
+#include "nav2_util/simple_action_server.hpp"
+#include "nav2_util/lifecycle_node.hpp"
+#include "nav2_util/robot_utils.hpp"
+#include "nav2_util/node_utils.hpp"
+#include "dwb_core/dwb_local_planner.hpp"
 #include <pluginlib/class_loader.hpp>
 
 namespace flex_nav {
-typedef actionlib::SimpleActionServer<flex_nav_common::ClearCostmapAction>
-    ClearCostmapActionServer;
-typedef actionlib::SimpleActionServer<flex_nav_common::FollowTopicAction>
-    FollowTopicActionServer;
+using ClearCostmapAction = flex_nav_common::action::ClearCostmap;
+using ClearCostmapActionServer = nav2_util::SimpleActionServer<ClearCostmapAction>;
 
-class FollowTopic {
+using FollowTopicAction = flex_nav_common::action::FollowTopic;
+using FollowTopicActionServer = nav2_util::SimpleActionServer<FollowTopicAction>;
+
+class FollowTopic : public nav2_util::LifecycleNode {
 public:
   /**
    * @brief The constructor to instantiate a node
    * @param tf A reference to a TransformListener
    */
-  FollowTopic(tf2_ros::Buffer &tf);
+  FollowTopic();
 
   /**
    * @brief The destructor to tear down a node
    */
   ~FollowTopic();
 
+protected:
+  /**
+   * @brief Configure member variables and initializes planner
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Activate member variables
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Deactivate member variables
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Reset member variables
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Called when in shutdown state
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
+
+  // Planner
+  nav2_core::GlobalPlanner::Ptr planner_;
+  pluginlib::ClassLoader<nav2_core::GlobalPlanner> ft_loader_;
+  std::string default_id_;
+  std::string default_type_;
+  std::string planner_id_;
+  std::string planner_type_;
+  double max_planner_duration_;
+
+  // Clock
+  rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
+
+  // TF buffer
+  std::shared_ptr<tf2_ros::Buffer> tf_;
+
+  // Global Costmap
+  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
+  std::unique_ptr<nav2_util::NodeThread> costmap_thread_;
+  nav2_costmap_2d::Costmap2D * costmap_;
+
+  // Publishers for the path
+  rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>::SharedPtr plan_publisher_;
+
 private:
   /**
    * @brief The call back for the FollowTopicActionServer
    * @param goal A reference to the published goal
    */
-  void execute(const flex_nav_common::FollowTopicGoalConstPtr &goal);
+  void execute();
 
   /**
    * @brief The call back for the Path Subscriber
    * @param goal A reference to the published goal
    */
-  void topic_cb(const nav_msgs::PathConstPtr &data);
+  void topic_cb(const nav_msgs::msg::Path::SharedPtr data);
 
   /**
    * @brief The call back for the ClearCostmapActionServer
    * @param goal A reference to the published goal
    */
-  void clear_costmap(const flex_nav_common::ClearCostmapGoalConstPtr &goal);
+  void clear_costmap();
 
-  // tf::TransformListener &tf_;
-  tf2_ros::Buffer& tf_;
-  ros::Subscriber sub_;
-  FollowTopicActionServer *ft_server_;
-  ClearCostmapActionServer *cc_server_;
-  costmap_2d::Costmap2DROS *costmap_;
-  pluginlib::ClassLoader<nav_core::BaseGlobalPlanner> loader_;
-  boost::shared_ptr<nav_core::BaseGlobalPlanner> planner_;
+  std::unique_ptr<FollowTopicActionServer> ft_server_;
+  std::unique_ptr<ClearCostmapActionServer> cc_server_;
+
+  std::string name_, costmap_name_;
+
+  rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr sub_;
+  nav_msgs::msg::Path current_path_;
+  nav_msgs::msg::Path latest_path_;
+
   bool running_;
 
-  std::string robot_base_frame_, global_frame_, costmap_name_, name_;
-  double planner_frequency_, controller_frequency_, inscribed_radius_,
-      circumscribed_radius_;
-  double planner_patience_, controller_patience_, oscillation_timeout_,
-      oscillation_distance_;
+  double expected_planner_frequency_;
   double distance_threshold_;
-
-  nav_msgs::PathConstPtr current_path_;
-  nav_msgs::PathConstPtr latest_path_;
 };
 };
 

@@ -37,8 +37,8 @@
 
 namespace flex_nav {
 
-double distanceSquared(const geometry_msgs::PoseStamped &p1,
-                       const geometry_msgs::PoseStamped &p2) {
+double distanceSquared(const geometry_msgs::msg::PoseStamped &p1,
+                       const geometry_msgs::msg::PoseStamped &p2) {
   const double x1 = p1.pose.position.x;
   const double y1 = p1.pose.position.y;
   const double x2 = p2.pose.position.x;
@@ -50,9 +50,9 @@ double distanceSquared(const geometry_msgs::PoseStamped &p1,
 }
 
 bool getTargetPointFromPath(
-    const double radius, const geometry_msgs::PoseStamped &robot_pose,
-    const std::vector<geometry_msgs::PoseStamped> &planned_path,
-    geometry_msgs::PoseStamped &target_point) {
+    const double radius, const geometry_msgs::msg::PoseStamped &robot_pose,
+    const std::vector<geometry_msgs::msg::PoseStamped> &planned_path,
+    geometry_msgs::msg::PoseStamped &target_point) {
   double x_diff = 0.0;
   double y_diff = 0.0;
   double sq_dist = 0.0;
@@ -87,14 +87,14 @@ bool getTargetPointFromPath(
   target_point.pose.position.x = planned_path[i - 1].pose.position.x;
   target_point.pose.position.y = planned_path[i - 1].pose.position.y;
   target_point.pose.position.z = planned_path[i - 1].pose.position.z;
-  target_point.pose.orientation = geometry_msgs::Quaternion();//0.0, 0.0, 0.0, 1.0);
+  target_point.pose.orientation = geometry_msgs::msg::Quaternion(); // 0.0, 0.0, 0.0, 1.0);
 
   if (i == planned_path.size()) {
     return true;
   }
 
-  const geometry_msgs::PoseStamped p0 = planned_path[i - 1];
-  const geometry_msgs::PoseStamped p1 = planned_path[i];
+  const geometry_msgs::msg::PoseStamped p0 = planned_path[i - 1];
+  const geometry_msgs::msg::PoseStamped p1 = planned_path[i];
 
   const double x0 = p0.pose.position.x;
   const double y0 = p0.pose.position.y;
@@ -137,28 +137,28 @@ bool getTargetPointFromPath(
  * @brief transform robot pose into specified frame
  */
 bool transformRobot(const tf2_ros::Buffer &tf,
-                    const geometry_msgs::PoseStamped &current_pose,
-                    geometry_msgs::PoseStamped &transformed_pose,
+                    const geometry_msgs::msg::PoseStamped &current_pose,
+                    geometry_msgs::msg::PoseStamped &transformed_pose,
                     const std::string& frame_id)
 {
     try
     {
-      tf.transform(current_pose, transformed_pose,frame_id);
+      tf.transform(current_pose, transformed_pose, frame_id);
       return true;
     }
     catch (tf2::LookupException& ex)
     {
-      ROS_ERROR_THROTTLE(1.0, "No Transform available Error looking up robot pose: %s\n", ex.what());
+      RCLCPP_ERROR(rclcpp::get_logger("follow_common_logger"), "No Transform available Error looking up robot pose: %s\n", ex.what());
       return false;
     }
     catch (tf2::ConnectivityException& ex)
     {
-      ROS_ERROR_THROTTLE(1.0, "Connectivity Error looking up robot pose: %s\n", ex.what());
+      RCLCPP_ERROR(rclcpp::get_logger("follow_common_logger"), "Connectivity Error looking up robot pose: %s\n", ex.what());
       return false;
     }
     catch (tf2::ExtrapolationException& ex)
     {
-      ROS_ERROR_THROTTLE(1.0, "Extrapolation Error looking up robot pose: %s\n", ex.what());
+      RCLCPP_ERROR(rclcpp::get_logger("follow_common_logger"), "Extrapolation Error looking up robot pose: %s\n", ex.what());
       return false;
     }
 

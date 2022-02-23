@@ -47,62 +47,117 @@
 #ifndef FLEX_PLANNER_GET_PATH_H
 #define FLEX_PLANNER_GET_PATH_H
 
-#include <ros/ros.h>
-#include <tf2_ros/buffer.h>
-
-#include <actionlib/server/simple_action_server.h>
-#include <flex_nav_common/ClearCostmapAction.h>
-#include <flex_nav_common/GetPathAction.h>
-
-#include <costmap_2d/costmap_2d.h>
-#include <costmap_2d/costmap_2d_ros.h>
-#include <costmap_2d/costmap_layer.h>
-#include <nav_core/base_global_planner.h>
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "nav2_costmap_2d/costmap_2d.hpp"
+#include "nav2_costmap_2d/costmap_2d_ros.hpp"
+#include "nav2_costmap_2d/costmap_layer.hpp"
+#include "nav2_core/global_planner.hpp"
+#include "nav2_navfn_planner/navfn_planner.hpp"
+#include "nav2_util/simple_action_server.hpp"
+#include "nav2_util/lifecycle_node.hpp"
+#include "nav2_util/robot_utils.hpp"
+#include "nav2_util/node_utils.hpp"
+#include "nav_msgs/msg/path.hpp"
+#include "tf2_ros/buffer.h"
+#include "flex_nav_common/action/clear_costmap.hpp"
+#include "flex_nav_common/action/get_path.hpp"
 
 #include <pluginlib/class_loader.hpp>
 
 namespace flex_nav {
-typedef actionlib::SimpleActionServer<flex_nav_common::ClearCostmapAction>
-    ClearCostmapActionServer;
-typedef actionlib::SimpleActionServer<flex_nav_common::GetPathAction>
-    GetPathActionServer;
+using ClearCostmapAction = flex_nav_common::action::ClearCostmap;
+using ClearCostmapActionServer = nav2_util::SimpleActionServer<ClearCostmapAction>;
 
-class GetPath {
+using GetPathAction = flex_nav_common::action::GetPath;
+using GetPathActionServer = nav2_util::SimpleActionServer<GetPathAction>;
+
+
+class GetPath : public nav2_util::LifecycleNode {
 public:
   /**
    * @brief The constructor to instantiate a node
    * @param tf A reference to a TransformListener
    */
-  GetPath(tf2_ros::Buffer& tf);
+  GetPath();
 
   /**
    * @brief The destructor to tear down a node
    */
   ~GetPath();
 
+protected:
+  /**
+   * @brief Configure member variables and initializes planner
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Activate member variables
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Deactivate member variables
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Reset member variables
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Called when in shutdown state
+   * @param state Reference to LifeCycle node state
+   * @return SUCCESS or FAILURE
+   */
+  nav2_util::CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
+
+  // Planner
+  nav2_core::GlobalPlanner::Ptr planner_;
+  pluginlib::ClassLoader<nav2_core::GlobalPlanner> gp_loader_;
+  std::string default_id_;
+  std::string default_type_;
+  std::string planner_id_;
+  std::string planner_type_;
+  double max_planner_duration_;
+
+  // Clock
+  rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
+
+  // TF buffer
+  std::shared_ptr<tf2_ros::Buffer> tf_;
+
+  // Global Costmap
+  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
+  std::unique_ptr<nav2_util::NodeThread> costmap_thread_;
+  nav2_costmap_2d::Costmap2D * costmap_;
+
+  // Publishers for the path
+  rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>::SharedPtr plan_publisher_;
+
 private:
   /**
    * @brief The call back for the GetPathActionServer
    * @param goal A reference to the published goal
    */
-  void execute(const flex_nav_common::GetPathGoalConstPtr &goal);
+  void execute();
 
   /**
    * @brief The call back for the ClearCostmapActionServer
    * @param goal A reference to the published goal
    */
-  void clear_costmap(const flex_nav_common::ClearCostmapGoalConstPtr &goal);
+  void clear_costmap();
 
-  tf2_ros::Buffer &tf_;
-  GetPathActionServer *gp_server_;
-  ClearCostmapActionServer *cc_server_;
-  costmap_2d::Costmap2DROS *costmap_;
-  pluginlib::ClassLoader<nav_core::BaseGlobalPlanner> loader_;
-  boost::shared_ptr<nav_core::BaseGlobalPlanner> planner_;
+  std::unique_ptr<GetPathActionServer> gp_server_;
+  std::unique_ptr<ClearCostmapActionServer> cc_server_;
 
-  std::string robot_base_frame_, global_frame_, name_;
-  double planner_frequency_, inscribed_radius_, circumscribed_radius_;
-  double planner_patience_, oscillation_timeout_, oscillation_distance_;
+  std::string name_;
 };
 };
 

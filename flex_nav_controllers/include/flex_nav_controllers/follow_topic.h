@@ -45,77 +45,201 @@
  *   the `clear_costmap` topic.
  */
 
-#ifndef FLEX_PLANNER_FOLLOW_TOPIC_H
-#define FLEX_PLANNER_FOLLOW_TOPIC_H
+#ifndef FLEX_CONTROLLER_FOLLOW_TOPIC_H
+#define FLEX_CONTROLLER_FOLLOW_TOPIC_H
 
-#include <ros/ros.h>
-#include <tf2_ros/buffer.h>
-
-#include <actionlib/server/simple_action_server.h>
-#include <flex_nav_common/ClearCostmapAction.h>
-#include <flex_nav_common/FollowTopicAction.h>
-#include <nav_msgs/Path.h>
-
-#include <costmap_2d/costmap_2d.h>
-#include <costmap_2d/costmap_2d_ros.h>
-#include <nav_core/base_local_planner.h>
-
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "tf2_ros/buffer.h"
+#include "nav2_core/goal_checker.hpp"
+#include "nav2_costmap_2d/costmap_2d_ros.hpp"
+#include "nav2_costmap_2d/costmap_2d.hpp"
+#include "nav2_costmap_2d/costmap_layer.hpp"
+#include "nav2_controller/nav2_controller.hpp"
+#include "nav_2d_utils/odom_subscriber.hpp"
+#include "nav2_util/robot_utils.hpp"
+#include "nav2_util/lifecycle_node.hpp"
+#include "nav2_util/simple_action_server.hpp"
+#include "nav2_util/robot_utils.hpp"
+#include "dwb_core/dwb_local_planner.hpp"
+#include "nav_msgs/msg/path.h"
+#include "flex_nav_common/action/clear_costmap.hpp"
+#include "flex_nav_common/action/follow_topic.hpp"
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <pluginlib/class_loader.hpp>
 
 namespace flex_nav {
-typedef actionlib::SimpleActionServer<flex_nav_common::ClearCostmapAction>
-    ClearCostmapActionServer;
-typedef actionlib::SimpleActionServer<flex_nav_common::FollowTopicAction>
-    FollowTopicActionServer;
+using ClearCostmapAction = flex_nav_common::action::ClearCostmap;
+using ClearCostmapActionServer = nav2_util::SimpleActionServer<ClearCostmapAction>;
 
-class FollowTopic {
+using FollowTopicAction = flex_nav_common::action::FollowTopic;
+using FollowTopicActionServer = nav2_util::SimpleActionServer<FollowTopicAction>;
+
+class FollowTopic : public nav2_util::LifecycleNode {
 public:
   /**
    * @brief The constructor to instantiate a node
    * @param tf A reference to a TransformListener
    */
-  FollowTopic(tf2_ros::Buffer &tf);
+  FollowTopic();
 
   /**
    * @brief The destructor to tear down a node
    */
   ~FollowTopic();
 
+protected:
+  /**
+   * @brief Configures controller parameters and member variables
+   *
+   * Configures controller plugin and costmap; Initialize odom subscriber,
+   * velocity publisher and follow path action server.
+   * @param state LifeCycle Node's state
+   * @return Success or Failure
+   * @throw pluginlib::PluginlibException When failed to initialize controller
+   * plugin
+   */
+  nav2_util::CallbackReturn on_configure(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Activates member variables
+   *
+   * Activates controller, costmap, velocity publisher and follow path action
+   * server
+   * @param state LifeCycle Node's state
+   * @return Success or Failure
+   */
+  nav2_util::CallbackReturn on_activate(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Deactivates member variables
+   *
+   * Deactivates follow path action server, controller, costmap and velocity
+   * publisher. Before calling deactivate state, velocity is being set to zero.
+   * @param state LifeCycle Node's state
+   * @return Success or Failure
+   */
+  nav2_util::CallbackReturn on_deactivate(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Calls clean up states and resets member variables.
+   *
+   * Controller and costmap clean up state is called, and resets rest of the
+   * variables
+   * @param state LifeCycle Node's state
+   * @return Success or Failure
+   */
+  nav2_util::CallbackReturn on_cleanup(const rclcpp_lifecycle::State & state) override;
+  /**
+   * @brief Called when in Shutdown state
+   * @param state LifeCycle Node's state
+   * @return Success or Failure
+   */
+  nav2_util::CallbackReturn on_shutdown(const rclcpp_lifecycle::State & state) override;
+
 private:
+  /**
+   * @brief Calls velocity publisher to publish zero velocity
+   */
+  void publishZeroVelocity();
+
+  /**
+   * @brief Calculates velocity and publishes to "cmd_vel" topic
+   */
+  void computeAndPublishVelocity();
+
+  /**
+   * @brief Calls velocity publisher to publish the velocity on "cmd_vel" topic
+   * @param velocity Twist velocity to be published
+   */
+  void publishVelocity(const geometry_msgs::msg::TwistStamped & velocity, geometry_msgs::msg::PoseStamped robotPose);
+
+  /**
+   * @brief Assigns path to controller
+   * @param path Path received from action server
+   */
+  void setPlannerPath(const nav_msgs::msg::Path & path);
+
+  /**
+   * @brief Checks if goal is reached
+   * @return true or false
+   */
+  bool isGoalReached();
+
+  /**
+   * @brief Obtain current pose of the robot
+   * @param pose To store current pose of the robot
+   * @return true if able to obtain current pose of the robot, else false
+   */
+  bool getRobotPose(geometry_msgs::msg::PoseStamped & pose);
+
   /**
    * @brief The call back for the FollowTopicActionServer
    * @param goal A reference to the published goal
    */
-  void execute(const flex_nav_common::FollowTopicGoalConstPtr &goal);
+  void execute();
 
   /**
    * @brief The call back for the Path Subscriber
    * @param goal A reference to the published goal
    */
-  void topic_cb(const nav_msgs::PathConstPtr &goal);
+  void topic_cb(const nav_msgs::msg::Path::SharedPtr data);
 
   /**
    * @brief The call back for the ClearCostmapActionServer
    * @param goal A reference to the published goal
    */
-  void clear_costmap(const flex_nav_common::ClearCostmapGoalConstPtr &goal);
+  void clear_costmap();
 
-  // tf::TransformListener &tf_;
-  tf2_ros::Buffer &tf_;
-  ros::Subscriber sub_;
-  FollowTopicActionServer *ft_server_;
-  ClearCostmapActionServer *cc_server_;
-  costmap_2d::Costmap2DROS *costmap_;
-  pluginlib::ClassLoader<nav_core::BaseLocalPlanner> loader_;
-  boost::shared_ptr<nav_core::BaseLocalPlanner> planner_;
-  bool running_;
+  std::unique_ptr<FollowTopicActionServer> ft_server_;
+  std::unique_ptr<ClearCostmapActionServer> cc_server_;
 
-  ros::Publisher vel_pub_;
-  nav_msgs::PathConstPtr current_path_;
-  nav_msgs::PathConstPtr latest_path_;
+  // The controller needs a costmap node
+  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
+  std::unique_ptr<nav2_util::NodeThread> costmap_thread_;
+
+  // Publishers and subscribers
+  rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::Twist>::SharedPtr vel_publisher_;
+  rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::TwistStamped>::SharedPtr vel_stamp_publisher_;
+  std::string vel_publisher_name_, vel_stamp_publisher_name_;
+  rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr sub_;
+  std::unique_ptr<nav_2d_utils::OdomSubscriber> odom_sub_;
+
+  // Progress Checker Plugin
+  pluginlib::ClassLoader<nav2_core::ProgressChecker> progress_checker_loader_;
+  nav2_core::ProgressChecker::Ptr progress_checker_;
+  std::string default_progress_checker_id_;
+  std::string default_progress_checker_type_;
+  std::string progress_checker_id_;
+  std::string progress_checker_type_;
+
+  // Goal Checker Plugin
+  pluginlib::ClassLoader<nav2_core::GoalChecker> goal_checker_loader_;
+  nav2_core::GoalChecker::Ptr goal_checker_;
+  std::string default_goal_checker_id_;
+  std::string default_goal_checker_type_;
+  std::string goal_checker_id_;
+  std::string goal_checker_type_;
+
+  // Controller Plugins
+  pluginlib::ClassLoader<nav2_core::Controller> lp_loader_;
+  nav2_core::Controller::Ptr controller_;
+  std::string default_id_;
+  std::string default_type_;
+  std::string controller_id_;
+  std::string controller_type_;
 
   double controller_frequency_;
-  std::string name_, robot_frame_;
+  double min_x_velocity_threshold_;
+  double min_y_velocity_threshold_;
+  double min_theta_velocity_threshold_;
+
+  rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
+
+  bool running_;
+
+  nav_msgs::msg::Path current_path_;
+  nav_msgs::msg::Path latest_path_;
+  geometry_msgs::msg::Pose end_pose_;
+
+  std::string name_;
 };
 };
 

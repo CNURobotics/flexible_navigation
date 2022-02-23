@@ -33,236 +33,291 @@
  *       POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
-#include <base_local_planner/goal_functions.h>
+#include <fstream>
+#include <memory>
+#include <streambuf>
+#include <string>
+#include <utility>
+#include <vector>
+#include <set>
+#include <exception>
 #include <flex_nav_planners/follow_common.h>
 #include <flex_nav_planners/follow_topic.h>
-#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/msg/twist.h>
+
+using std::placeholders::_1;
 
 namespace flex_nav {
-FollowTopic::FollowTopic(tf2_ros::Buffer &tf)
-    : tf_(tf), ft_server_(NULL), costmap_(NULL),
-      loader_("nav_core", "nav_core::BaseGlobalPlanner"), running_(false),
-      name_(ros::this_node::getName()) {
-  ros::NodeHandle private_nh("~");
-  ros::NodeHandle nh;
+  FollowTopic::FollowTopic()
+      : nav2_util::LifecycleNode("follow_topic", "", true),
+        ft_loader_("nav2_core", "nav2_core::GlobalPlanner"),
+        default_id_{"GridBased"},
+        default_type_{"nav2_navfn_planner/NavfnPlanner"},
+        costmap_(nullptr),
+        name_("follow_topic"),
+        running_(false) {
+    using namespace std::placeholders;
 
-  ft_server_ = new FollowTopicActionServer(
-      nh, name_, boost::bind(&FollowTopic::execute, this, _1), false);
-  cc_server_ = new ClearCostmapActionServer(
-      nh, name_ + "/clear_costmap",
-      boost::bind(&FollowTopic::clear_costmap, this, _1), false);
+    declare_parameter("planner_plugin", default_id_);
+    declare_parameter("distance_threshold", 5.0);
+    declare_parameter("expected_planner_frequency", 1.0);
+    declare_parameter("costmap_name", "low_middle_costmap");
 
-  std::string planner;
-  private_nh.param("planner", planner, std::string("navfn/NavfnROS"));
-  private_nh.param("costmap_name", costmap_name_,
-                   std::string("middle_costmap"));
-  private_nh.param(costmap_name_ + "/robot_base_frame", robot_base_frame_,
-                   std::string("base_link"));
-  private_nh.param(costmap_name_ + "/reference_frame", global_frame_,
-                   std::string("/odom"));
-  private_nh.param("planner_frequency", planner_frequency_, 1.0);
-  private_nh.param("distance_threshold", distance_threshold_, 5.0);
+    get_parameter("costmap_name", costmap_name_);
 
-  costmap_ = new costmap_2d::Costmap2DROS(costmap_name_, tf);
-  costmap_->pause();
+    costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
+      costmap_name_, std::string{get_namespace()}, costmap_name_);
 
-  try {
-    ROS_INFO("[%s] Create instance of %s planner", name_.c_str(),
-             planner.c_str());
-    planner_ = loader_.createInstance(planner);
-    planner_->initialize(loader_.getName(planner), costmap_);
-  } catch (const pluginlib::PluginlibException &ex) {
-    ROS_ERROR("[%s] Failed to create the %s planner: %s", name_.c_str(),
-              planner.c_str(), ex.what());
-    exit(1);
+    costmap_thread_ = std::make_unique<nav2_util::NodeThread>(costmap_ros_);
   }
 
-  costmap_->start();
-  ft_server_->start();
-  cc_server_->start();
-  ros::spin();
-}
-
-FollowTopic::~FollowTopic() {
-  ft_server_->shutdown();
-  cc_server_->shutdown();
-}
-
-void FollowTopic::execute(
-    const flex_nav_common::FollowTopicGoalConstPtr &goal) {
-  ros::NodeHandle n;
-  ros::Rate r(planner_frequency_);
-
-  while (running_) {
-    ROS_WARN_THROTTLE(0.25, "[%s] Waiting for lock", name_.c_str());
-    r.sleep();
+  FollowTopic::~FollowTopic() {
+    planner_.reset();
+    costmap_thread_.reset();
   }
 
-  current_path_.reset();
-  latest_path_.reset();
+  nav2_util::CallbackReturn
+  FollowTopic::on_configure(const rclcpp_lifecycle::State & state)
+  {
+    name_ = this->get_name();
+    ft_server_ = std::make_unique<FollowTopicActionServer>(
+      rclcpp_node_,
+      name_,
+      std::bind(&FollowTopic::execute, this));
 
-  ROS_INFO("[%s] Attempting to listen to topic: %s", name_.c_str(),
-           goal->topic.data.c_str());
+    cc_server_ = std::make_unique<ClearCostmapActionServer>(
+      rclcpp_node_,
+      name_ + "/clear_costmap",
+      std::bind(&FollowTopic::clear_costmap, this));
 
-  bool good(false);
+    RCLCPP_INFO(get_logger(), "Configuring");
+    get_parameter("expected_planner_frequency", expected_planner_frequency_);
+    get_parameter("distance_threshold", distance_threshold_);
 
-  ros::master::V_TopicInfo master_topics;
-  ros::master::getTopics(master_topics);
+    costmap_ros_->on_configure(state);
+    costmap_ = costmap_ros_->getCostmap();
 
-  for (ros::master::V_TopicInfo::iterator it = master_topics.begin();
-       it != master_topics.end(); it++) {
-    const ros::master::TopicInfo &info = *it;
+    RCLCPP_DEBUG(get_logger(), "Costmap size: %d,%d",
+      costmap_->getSizeInCellsX(), costmap_->getSizeInCellsY());
 
-    if (info.name.find(goal->topic.data) != std::string::npos &&
-        !info.datatype.compare("nav_msgs/Path")) {
-      sub_ = n.subscribe(goal->topic.data, 1, &FollowTopic::topic_cb, this);
+    tf_ = costmap_ros_->getTfBuffer();
 
-      ROS_INFO("[%s] Success!", name_.c_str());
+    get_parameter("planner_plugin", planner_id_);
+    if (planner_id_ == default_id_) {
+      declare_parameter(default_id_ + ".plugin", default_type_);
+    }
+
+    auto node = shared_from_this();
+
+    try {
+      planner_type_ = nav2_util::get_plugin_type_param(node, planner_id_);
+      planner_ = ft_loader_.createUniqueInstance(planner_type_);
+      RCLCPP_INFO(get_logger(), "Created global planner plugin %s of type %s",
+        planner_id_.c_str(), planner_type_.c_str());
+      planner_->configure(node, planner_id_, tf_, costmap_ros_);
+    } catch (const pluginlib::PluginlibException & ex) {
+      RCLCPP_FATAL(get_logger(), "Failed to create global planner. Exception: %s",
+        ex.what());
+      return nav2_util::CallbackReturn::FAILURE;
+    }
+
+    double expected_planner_frequency;
+    get_parameter("expected_planner_frequency", expected_planner_frequency);
+    if (expected_planner_frequency > 0) {
+      max_planner_duration_ = 1 / expected_planner_frequency;
+    } else {
+      RCLCPP_WARN(get_logger(),
+        "The expected planner frequency parameter is %.4f Hz. The value should to be greater"
+        " than 0.0 to turn on duration overrrun warning messages", expected_planner_frequency);
+      max_planner_duration_ = 0.0;
+    }
+
+    plan_publisher_ = create_publisher<nav_msgs::msg::Path>(name_ + "/plan", 1);
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowTopic::on_activate(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Activating");
+    plan_publisher_->on_activate();
+    ft_server_->activate();
+    cc_server_->activate();
+    costmap_ros_->on_activate(state);
+    planner_->activate();
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowTopic::on_deactivate(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Deactivating");
+    plan_publisher_->on_deactivate();
+    ft_server_->deactivate();
+    cc_server_->deactivate();
+    costmap_ros_->on_deactivate(state);
+    planner_->deactivate();
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowTopic::on_cleanup(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Cleaning up");
+    plan_publisher_.reset();
+    ft_server_.reset();
+    cc_server_.reset();
+    tf_.reset();
+    costmap_ros_->on_cleanup(state);
+    planner_->cleanup();
+    costmap_ = nullptr;
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowTopic::on_shutdown(const rclcpp_lifecycle::State &)
+  {
+    RCLCPP_INFO(get_logger(), "Shutting down");
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  void FollowTopic::execute() {
+    auto goal = ft_server_->get_current_goal();
+    rclcpp::Rate r(expected_planner_frequency_);
+    current_path_ = nav_msgs::msg::Path();
+    latest_path_ = nav_msgs::msg::Path();
+
+    bool good(false);
+    std::shared_ptr<flex_nav_common::action::FollowTopic::Result> result =
+      std::make_shared<flex_nav_common::action::FollowTopic::Result>();
+
+    while (running_) {
+      RCLCPP_WARN(get_logger(), "[%s] Waiting for lock", name_.c_str());
+      r.sleep();
+    }
+
+    RCLCPP_INFO(get_logger(), "[%s] Attempting to listen to topic: %s",
+      name_.c_str(), goal->topic.data.c_str());
+
+    try {
+      sub_ = create_subscription<nav_msgs::msg::Path>(
+        goal->topic.data,
+        rclcpp::SystemDefaultsQoS(),
+        std::bind(&FollowTopic::topic_cb, this, std::placeholders::_1));
+
+      RCLCPP_INFO(get_logger(), "[%s] Success!", name_.c_str());
       good = true;
-      break;
     }
-  }
+    catch(std::exception& e) {
+      RCLCPP_WARN(get_logger(), "Unable to create subscription [%s]");
+      good = false;
+    }
 
-  // This is not good
-  if (!good) {
-    ROS_ERROR("[%s] Desired topic does not publish a nav_msgs/Path",
-              name_.c_str());
-    ft_server_->setAborted();
-    sub_.shutdown();
-    current_path_.reset();
-    latest_path_.reset();
-    return;
-  }
+    // This is not good
+    if (!good) {
+      RCLCPP_ERROR(get_logger(), "[%s] Desired topic does not publish a nav_msgs/msg/Path",
+        name_.c_str());
 
-  // Wait for a path to be received
-  while ((!latest_path_ || latest_path_->poses.size() == 0) && n.ok() &&
-         !ft_server_->isNewGoalAvailable() &&
-         !ft_server_->isPreemptRequested()) {
-    r.sleep();
-  }
-
-  flex_nav_common::FollowTopicResult result;
-  running_ = true;
-  while (running_ && n.ok() && !ft_server_->isNewGoalAvailable() &&
-         !ft_server_->isPreemptRequested()) {
-    current_path_ = latest_path_;
-
-    if (current_path_->poses.empty()) {
-      ROS_ERROR("[%s] The path is empty!", name_.c_str());
+      result->code = flex_nav_common::action::FollowTopic::Result::FAILURE;
+      ft_server_->terminate_current(result);
+      sub_.reset();
+      current_path_ = nav_msgs::msg::Path();
+      latest_path_ = nav_msgs::msg::Path();
       return;
     }
 
-    if (current_path_->poses[0].header.frame_id == "") {
-      ROS_ERROR("[%s] The frame_id is empty!", name_.c_str());
-      return;
+    // Wait for a path to be received
+    while ((latest_path_.poses.empty()) && rclcpp::ok() && !ft_server_->is_cancel_requested()) {
+      r.sleep();
     }
 
-    ros::Time start_time;
-    start_time = ros::Time::now();
-    geometry_msgs::PoseStamped transformed;
+    running_ = true;
+    while (running_ && rclcpp::ok() && !ft_server_->is_cancel_requested()) {
+      current_path_ = latest_path_;
 
-    geometry_msgs::PoseStamped start_pose;
-    geometry_msgs::PoseStamped datTFPose;
-    geometry_msgs::PoseStamped transformed_pose;
+      if (current_path_.poses.empty()) {
+        RCLCPP_ERROR(get_logger(), "[%s] The path is empty!", name_.c_str());
+        return;
+      }
 
-    geometry_msgs::PoseStamped start_pose_path;
-    flex_nav_common::FollowTopicFeedback feedback;
+      if (current_path_.header.frame_id == "") {
+        RCLCPP_ERROR(get_logger(), "[%s] The frame_id is empty!", name_.c_str());
+        return;
+      }
 
-    // Get the current pose of the robot
-    costmap_->getRobotPose(start_pose); // odom frame
-    result.pose = start_pose.pose;
+      geometry_msgs::msg::PoseStamped start_pose;
+      geometry_msgs::msg::PoseStamped goal_pose = current_path_.poses.back();
+      auto feedback = std::make_shared<FollowTopicAction::Feedback>();
 
-    if (!transformRobot(tf_, start_pose, start_pose_path, current_path_->poses[0].header.frame_id))
-    {
-      ROS_ERROR("[%s] No valid starting point found", name_.c_str());
-      ROS_ERROR("[%s] Could not get a valid goal", name_.c_str());
-      result.code = flex_nav_common::FollowTopicResult::FAILURE;
-      ft_server_->setAborted(result, "Failed to transform starting pose!");
-      running_ = false;
-      return;
+      // Get the current pose of the robot
+      if (!costmap_ros_->getRobotPose(start_pose)) {
+        ft_server_->terminate_current();
+        return;
+      }
 
-    }
+      result->pose = start_pose.pose;
 
-    result.pose = start_pose_path.pose;
-    ROS_DEBUG("[%s] Generating path from path: #%u", name_.c_str(),
-              current_path_->header.seq);
+      RCLCPP_DEBUG(get_logger(), "[%s] Generating path from path: #%u", name_.c_str(),
+        current_path_.header);
 
-    // Do some work to find the goal point
-    geometry_msgs::PoseStamped goal_pose_path;
-
-    costmap_2d::Costmap2D *costmap = costmap_->getCostmap();
-    double r2 =
-        std::min(costmap->getSizeInCellsX() * costmap->getResolution() / 2.0,
-                 costmap->getSizeInCellsY() * costmap->getResolution() / 2.0) -
-        costmap->getResolution() * 2;
-    r2 = r2 * r2;
-
-    if (!getTargetPointFromPath(r2, start_pose_path, current_path_->poses,
-                                goal_pose_path)) {
-      ROS_ERROR("[%s] No valid point found along path", name_.c_str());
-      ROS_ERROR("[%s] Could not get a valid goal along path", name_.c_str());
-      result.code = flex_nav_common::FollowTopicResult::FAILURE;
-      ft_server_->setAborted(result, "Failed to get a valid goal point along path");
-      running_ = false;
-      return;
-    }
-    result.pose = goal_pose_path.pose;
-
-    double threshold = distance_threshold_ * costmap->getResolution();
-    if (distanceSquared(start_pose_path, goal_pose_path) <= threshold * threshold) {
-      result.code = flex_nav_common::FollowTopicResult::SUCCESS;
-      ft_server_->setSucceeded(result, "Success!");
-      running_ = false;
-      return;
-    }
-
-    //tf_.transform(transformed_pose, transformed, current_path_->poses[0].header.frame_id);
-    //transformed = transformed_pose;
-
-    feedback.pose = goal_pose_path.pose;
-    ft_server_->publishFeedback(feedback);
-
-    std::vector<geometry_msgs::PoseStamped> plan;
-    if (planner_->makePlan(start_pose_path, goal_pose_path, plan)) {
-      if (plan.empty()) {
-        result.code = flex_nav_common::FollowTopicResult::FAILURE; // empty plan
-        ft_server_->setAborted(result, "Empty path");
+      nav2_costmap_2d::Costmap2D *costmap = costmap_ros_->getCostmap();
+      double threshold = distance_threshold_ * costmap->getResolution();
+      if (distanceSquared(start_pose, goal_pose) <= threshold * threshold) {
+        RCLCPP_INFO(get_logger(), "[%s] Reached goal - Success!", name_.c_str());
+        result->code = flex_nav_common::action::FollowTopic::Result::SUCCESS;
+        ft_server_->succeeded_current(result);
         running_ = false;
         return;
       }
-    } else {
-      result.code =
-          flex_nav_common::FollowTopicResult::FAILURE; // failed to make plan
-      ft_server_->setAborted(result, "Failed to make plan");
-      running_ = false;
-      return;
+
+      feedback->pose = goal_pose.pose;
+      ft_server_->publish_feedback(feedback);
+
+      nav_msgs::msg::Path path = planner_->createPlan(start_pose, goal_pose);
+      if (!path.poses.empty()) {
+        plan_publisher_->publish(std::move(path));
+      }
+      else {
+        // empty plan
+        RCLCPP_WARN(get_logger(), "[%s] Empty path - abort goal!", name_.c_str());
+        result->code = flex_nav_common::action::FollowTopic::Result::FAILURE;
+        ft_server_->terminate_current(result);
+        running_ = false;
+        return;
+      }
+
+      r.sleep();
     }
 
-    r.sleep();
+    if (ft_server_->is_cancel_requested()) {
+      RCLCPP_WARN(get_logger(), "[%s] Preempting goal...", name_.c_str());
+      result->code = flex_nav_common::action::FollowTopic::Result::CANCEL;
+    } else {
+      RCLCPP_ERROR(get_logger(), "[%s] Failed goal...", name_.c_str());
+      result->code = flex_nav_common::action::FollowTopic::Result::FAILURE;
+    }
+
+    ft_server_->terminate_current(result);
+    running_ = false;
   }
 
-  if (ft_server_->isPreemptRequested()) {
-    ROS_WARN("[%s] Preempting goal...", name_.c_str());
-    ft_server_->setPreempted(result, "Goal preempted");
-  } else {
-    ft_server_->setSucceeded(result, "Goal canceled");
+  void FollowTopic::topic_cb(const nav_msgs::msg::Path::SharedPtr data) {
+    RCLCPP_DEBUG(get_logger(), "[%s] Recieved a new path with %lu points: #%u", name_.c_str(),
+      data->poses.size(), data->header);
+
+    latest_path_ = *data;
   }
-  running_ = false;
-}
 
-void FollowTopic::topic_cb(const nav_msgs::PathConstPtr &data) {
-  ROS_DEBUG("[%s] Recieved a new path with %lu points: #%u", name_.c_str(),
-            data->poses.size(), data->header.seq);
-
-  latest_path_ = data;
-}
-
-void FollowTopic::clear_costmap(
-    const flex_nav_common::ClearCostmapGoalConstPtr &goal) {
-  costmap_->resetLayers();
-
-  flex_nav_common::ClearCostmapResult result;
-  result.code = flex_nav_common::ClearCostmapResult::SUCCESS;
-  cc_server_->setSucceeded(result, "Success");
-}
+  void FollowTopic::clear_costmap() {
+    auto goal = cc_server_->get_current_goal();
+    costmap_ros_->resetLayers();
+    std::shared_ptr<flex_nav_common::action::ClearCostmap::Result> result =
+      std::make_shared<flex_nav_common::action::ClearCostmap::Result>();
+    result->code = flex_nav_common::action::ClearCostmap::Result::SUCCESS;
+    cc_server_->succeeded_current(result);
+  }
 }

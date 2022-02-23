@@ -2,7 +2,7 @@ Flexible Navigation Planner Nodes
 =================================
 
 The planner nodes are all implementations of an [ActionServer] and will generate
-a [nav_msgs]/[Path].
+a [nav_msgs]/[Path] based on the ros-planning Navigation2 planner nodes.
 
 Overview:
 ---------
@@ -21,9 +21,10 @@ costmap with potentially higher accuracy. You may chain several planners
 together by using the `follow_topic` node and instructing them to listen to one
 another.
 
-[ActionServer]: http://wiki.ros.org/actionlib
-[nav_msgs]: http://docs.ros.org/api/nav_msgs/html/index-msg.html
-[Path]: http://docs.ros.org/api/nav_msgs/html/msg/Path.html
-[geometry_msgs]: http://docs.ros.org/api/geometry_msgs/html/index-msg.html
-[Pose]: http://docs.ros.org/api/geometry_msgs/html/msg/Pose.html
-[rviz]: http://wiki.ros.org/rviz
+[Navigation2]: https://github.com/ros-planning/navigation2
+[ActionServer]: http://design.ros2.org/articles/actions.html
+[nav_msgs]: https://docs.ros2.org/foxy/api/nav_msgs/index-msg.html
+[Path]: https://docs.ros2.org/foxy/api/nav_msgs/msg/Path.html
+[geometry_msgs]: https://docs.ros2.org/foxy/api/geometry_msgs/index-msg.html
+[Pose]: https://docs.ros2.org/foxy/api/geometry_msgs/msg/Pose.html
+[rviz]: https://github.com/ros2/rviz

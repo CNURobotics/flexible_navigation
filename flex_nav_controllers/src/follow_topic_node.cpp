@@ -33,16 +33,14 @@
  *       POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
-#include <flex_nav_controllers/follow_topic.h>
-#include <tf2_ros/transform_listener.h>
+#include <memory>
+#include "rclcpp/rclcpp.hpp"
+#include "flex_nav_controllers/follow_topic.h"
 
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "follow_topic_node");
-  tf2_ros::Buffer buffer(ros::Duration(10));
-  tf2_ros::TransformListener tf(buffer);
-
-  flex_nav::FollowTopic flex_follower(buffer);
-
-  ros::spin();
-  return (0);
+  rclcpp::init(argc, argv);
+  auto followTopic = std::make_shared<flex_nav::FollowTopic>();
+  rclcpp::spin(followTopic->get_node_base_interface());
+  rclcpp::shutdown();
+  return 0;
 }

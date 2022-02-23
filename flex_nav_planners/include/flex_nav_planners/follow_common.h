@@ -36,9 +36,10 @@
 #ifndef FLEX_PLANNER_FOLLOW_COMMON_H
 #define FLEX_PLANNER_FOLLOW_COMMON_H
 
-#include <ros/ros.h>
+#include "rclcpp/rclcpp.hpp"
 #include <tf2_ros/buffer.h>
-#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/msg/pose_stamped.h>
+#include <geometry_msgs/msg/quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 namespace flex_nav {
@@ -48,8 +49,8 @@ namespace flex_nav {
  * @param p2 The second point
  * @return The distance between p1 and p2 in double precision
  */
-double distanceSquared(const geometry_msgs::PoseStamped &p1,
-                       const geometry_msgs::PoseStamped &p2);
+double distanceSquared(const geometry_msgs::msg::PoseStamped &p1,
+                       const geometry_msgs::msg::PoseStamped &p2);
 
 /**
  * @brief Finds a point along path at lookahead radius
@@ -60,17 +61,17 @@ double distanceSquared(const geometry_msgs::PoseStamped &p1,
  * @return True if a target point was successfully found
  */
 bool getTargetPointFromPath(
-    const double radius, const geometry_msgs::PoseStamped &robot_pose,
-    const std::vector<geometry_msgs::PoseStamped> &planned_path,
-    geometry_msgs::PoseStamped &target_point);
+    const double radius, const geometry_msgs::msg::PoseStamped &robot_pose,
+    const std::vector<geometry_msgs::msg::PoseStamped> &planned_path,
+    geometry_msgs::msg::PoseStamped &target_point);
 
 
 /**
  * @brief transform robot pose into specified frame
  */
 bool transformRobot(const tf2_ros::Buffer &tf,
-                    const geometry_msgs::PoseStamped &current_pose,
-                    geometry_msgs::PoseStamped &transformed_pose,
+                    const geometry_msgs::msg::PoseStamped &current_pose,
+                    geometry_msgs::msg::PoseStamped &transformed_pose,
                     const std::string& frame_id);
 }
 #endif

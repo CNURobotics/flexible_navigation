@@ -33,211 +33,271 @@
  *       POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
-#include <base_local_planner/goal_functions.h>
+#include <string.h>
 #include <flex_nav_planners/follow_common.h>
 #include <flex_nav_planners/follow_path.h>
-
-#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/msg/twist.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 namespace flex_nav {
-FollowPath::FollowPath(tf2_ros::Buffer &tf)
-    : tf_(tf), fp_server_(NULL), costmap_(NULL),
-      loader_("nav_core", "nav_core::BaseGlobalPlanner"), running_(false),
-      name_(ros::this_node::getName()) {
-  ros::NodeHandle private_nh("~");
-  ros::NodeHandle nh;
+  FollowPath::FollowPath()
+      : nav2_util::LifecycleNode("follow_path", "", true),
+        fp_loader_("nav2_core", "nav2_core::GlobalPlanner"),
+        default_id_{"GridBased"},
+        default_type_{"nav2_navfn_planner/NavfnPlanner"},
+        costmap_(nullptr),
+        name_("follow_path"),
+        running_(false)
+        {
+    using namespace std::placeholders;
 
-  fp_server_ = new FollowPathActionServer(
-      nh, name_, boost::bind(&FollowPath::execute, this, _1), false);
-  cc_server_ = new ClearCostmapActionServer(
-      nh, name_ + "/clear_costmap",
-      boost::bind(&FollowPath::clear_costmap, this, _1), false);
+    declare_parameter("planner_plugin", default_id_);
+    declare_parameter("expected_planner_frequency", 1.0);
+    declare_parameter("distance_threshold", 5.0);
+    declare_parameter("costmap_name", "middle_costmap");
+    declare_parameter("global_frame", "map");
 
-  std::string planner;
-  private_nh.param("planner", planner, std::string("navfn/NavfnROS"));
-  private_nh.param("costmap_name", costmap_name_,
-                   std::string("middle_costmap"));
-  private_nh.param(costmap_name_ + "/robot_base_frame", robot_base_frame_,
-                   std::string("base_link"));
-  private_nh.param(costmap_name_ + "/reference_frame", global_frame_,
-                   std::string("/odom"));
-  private_nh.param("planner_frequency", planner_frequency_, 1.0);
-  private_nh.param("distance_threshold", distance_threshold_, 5.0);
+    get_parameter("costmap_name", costmap_name_);
+    get_parameter("global_frame", global_frame_);
 
-  costmap_ = new costmap_2d::Costmap2DROS(costmap_name_, tf);
-  costmap_->pause();
+    costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
+      costmap_name_, std::string{get_namespace()}, costmap_name_);
 
-  try {
-    ROS_INFO("[%s] Create instance of %s planner", name_.c_str(),
-             planner.c_str());
-    planner_ = loader_.createInstance(planner);
-    planner_->initialize(loader_.getName(planner), costmap_);
-  } catch (const pluginlib::PluginlibException &ex) {
-    ROS_ERROR("[%s] Failed to create the %s planner: %s", name_.c_str(),
-              planner.c_str(), ex.what());
-    exit(1);
+    costmap_thread_ = std::make_unique<nav2_util::NodeThread>(costmap_ros_);
   }
 
-  costmap_->start();
-  fp_server_->start();
-  cc_server_->start();
-  ros::spin();
-}
-
-FollowPath::~FollowPath() {
-  fp_server_->shutdown();
-  cc_server_->shutdown();
-}
-
-void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
-  ros::Rate r(planner_frequency_);
-  flex_nav_common::FollowPathResult result;
-
-  ROS_INFO(" [%s] Received goal  (%d)", name_.c_str(),
-           fp_server_->isNewGoalAvailable());
-
-  while (running_) {
-    ROS_WARN_THROTTLE(0.25, "[%s] Waiting for lock", name_.c_str());
+  FollowPath::~FollowPath() {
+    planner_.reset();
+    costmap_thread_.reset();
   }
 
-  while (fp_server_->isNewGoalAvailable()) {
-    ROS_WARN_THROTTLE(0.25, "[%s] Waiting for prior goal to clear ",
-                     name_.c_str());
-  }
+  nav2_util::CallbackReturn
+  FollowPath::on_configure(const rclcpp_lifecycle::State & state)
+  {
+    name_ = this->get_name();
+    fp_server_ = std::make_unique<FollowPathActionServer>(
+      rclcpp_node_,
+      name_,
+      std::bind(&FollowPath::execute, this));
 
-  if (goal->path.poses.empty()) {
-    ROS_ERROR("[%s] The path is empty!", name_.c_str());
-    result.code = flex_nav_common::FollowPathResult::FAILURE;
-    fp_server_->setAborted(result, "Path is empty!");
-    return;
-  }
+    cc_server_ = std::make_unique<ClearCostmapActionServer>(
+      rclcpp_node_,
+      name_ + "/clear_costmap",
+      std::bind(&FollowPath::clear_costmap, this));
 
-  if (goal->path.poses[0].header.frame_id == "") {
-    ROS_ERROR("[%s] The frame_id is empty!", name_.c_str());
-    result.code = flex_nav_common::FollowPathResult::FAILURE;
-    fp_server_->setAborted(result, "frame_id is empty!");
-    return;
-  }
+    RCLCPP_INFO(get_logger(), "Configuring");
+    get_parameter("expected_planner_frequency", expected_planner_frequency_);
+    get_parameter("distance_threshold", distance_threshold_);
 
-  ROS_INFO(
-      " [%s] Ready to process latest goal  New Goal(%d) Preempt Requested(%d)",
-      name_.c_str(), fp_server_->isNewGoalAvailable(),
-      fp_server_->isPreemptRequested());
+    costmap_ros_->on_configure(state);
+    costmap_ = costmap_ros_->getCostmap();
 
-  running_ = true;
-  ros::NodeHandle n;
-  while (running_ && n.ok() && !fp_server_->isNewGoalAvailable() &&
-         !fp_server_->isPreemptRequested()) {
-    geometry_msgs::PoseStamped start_pose_map;
-    geometry_msgs::PoseStamped start_pose_path;
-    geometry_msgs::PoseStamped goal_pose_map;
-    geometry_msgs::PoseStamped goal_pose_path;
+    RCLCPP_DEBUG(get_logger(), "Costmap size: %d,%d",
+      costmap_->getSizeInCellsX(), costmap_->getSizeInCellsY());
 
-    // Get the current robot pose from costmap
-    costmap_->getRobotPose(start_pose_map);
+    tf_ = costmap_ros_->getTfBuffer();
 
-    start_pose_path.header.stamp = start_pose_map.header.stamp;
-    // Transform the pose into the same frame as path to follow
-    if (!transformRobot(tf_, start_pose_map, start_pose_path, goal->path.poses[0].header.frame_id))
-    {
-      ROS_ERROR("[%s] No valid starting point found along path", name_.c_str());
-      result.code = flex_nav_common::FollowPathResult::FAILURE;
-      fp_server_->setAborted(result, "Failed to transform starting pose!");
-      running_ = false;
-      return;
-
+    get_parameter("planner_plugin", planner_id_);
+    if (planner_id_ == default_id_) {
+      declare_parameter(default_id_ + ".plugin", default_type_);
     }
 
-    // Update result with latest robot pose information
-    result.pose   = start_pose_path.pose;
+    auto node = shared_from_this();
 
-    // Do some work to find the goal point along the desired path
-    costmap_2d::Costmap2D *costmap = costmap_->getCostmap();
-    double r2 =
-        std::min(costmap->getSizeInCellsX() * costmap->getResolution() / 2.0,
-                 costmap->getSizeInCellsY() * costmap->getResolution() / 2.0) -
-        costmap->getResolution() * 2;
-    r2 = r2 * r2;
-
-    if (!getTargetPointFromPath(r2, start_pose_path, goal->path.poses,
-                                goal_pose_path)) {
-      ROS_ERROR("[%s] No valid point found - cannot get a valid goal along path",
-                name_.c_str());
-      result.code = flex_nav_common::FollowPathResult::FAILURE;
-      fp_server_->setAborted(result, "Failed to get a valid goal along path");
-      running_ = false;
-      return;
+    try {
+      planner_type_ = nav2_util::get_plugin_type_param(node, planner_id_);
+      planner_ = fp_loader_.createUniqueInstance(planner_type_);
+      RCLCPP_INFO(get_logger(), "Created global planner plugin %s of type %s",
+        planner_id_.c_str(), planner_type_.c_str());
+      planner_->configure(node, planner_id_, tf_, costmap_ros_);
+    } catch (const pluginlib::PluginlibException & ex) {
+      RCLCPP_FATAL(get_logger(), "Failed to create global planner. Exception: %s",
+        ex.what());
+      return nav2_util::CallbackReturn::FAILURE;
     }
 
-    // Convert the goal point from path frame to map frame
-    goal_pose_map.header.stamp = ros::Time();
-    goal_pose_map.header.frame_id = global_frame_;
-    result.pose = goal_pose_path.pose;
-
-    if (!transformRobot(tf_, goal_pose_path, goal_pose_map, global_frame_))
-    {
-      ROS_ERROR("[%s] No valid transform for the goal point found along path", name_.c_str());
-      result.code = flex_nav_common::FollowPathResult::FAILURE;
-      fp_server_->setAborted(result, "Failed to transform goal pose!");
-      running_ = false;
-      return;
+    if (expected_planner_frequency_ > 0) {
+      max_planner_duration_ = 1 / expected_planner_frequency_;
+    } else {
+      RCLCPP_WARN(get_logger(),
+        "The expected planner frequency parameter is %.4f Hz. The value should to be greater"
+        " than 0.0 to turn on duration overrrun warning messages", expected_planner_frequency_);
+      max_planner_duration_ = 0.0;
     }
 
-    double threshold = distance_threshold_ * costmap->getResolution();
-    if (distanceSquared(start_pose_path, goal_pose_path) <= threshold * threshold) {
-      ROS_INFO("[%s] Reached goal - Success!", name_.c_str());
-      result.code = flex_nav_common::FollowPathResult::SUCCESS;
-      fp_server_->setSucceeded(result, "Success!");
-      running_ = false;
+    plan_publisher_ = create_publisher<nav_msgs::msg::Path>(name_ + "/plan", 1);
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowPath::on_activate(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Activating");
+    plan_publisher_->on_activate();
+    fp_server_->activate();
+    cc_server_->activate();
+    costmap_ros_->on_activate(state);
+    planner_->activate();
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowPath::on_deactivate(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Deactivating");
+    plan_publisher_->on_deactivate();
+    fp_server_->deactivate();
+    cc_server_->deactivate();
+    costmap_ros_->on_deactivate(state);
+    planner_->deactivate();
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowPath::on_cleanup(const rclcpp_lifecycle::State & state)
+  {
+    RCLCPP_INFO(get_logger(), "Cleaning up");
+    plan_publisher_.reset();
+    fp_server_.reset();
+    cc_server_.reset();
+    tf_.reset();
+    costmap_ros_->on_cleanup(state);
+    planner_->cleanup();
+    costmap_ = nullptr;
+
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  nav2_util::CallbackReturn
+  FollowPath::on_shutdown(const rclcpp_lifecycle::State &)
+  {
+    RCLCPP_INFO(get_logger(), "Shutting down");
+    return nav2_util::CallbackReturn::SUCCESS;
+  }
+
+  void FollowPath::execute() {
+    auto goal = fp_server_->get_current_goal();
+    rclcpp::Rate r(expected_planner_frequency_);
+    std::shared_ptr<flex_nav_common::action::FollowPath::Result> result =
+      std::make_shared<flex_nav_common::action::FollowPath::Result>();
+
+    RCLCPP_INFO(get_logger(), " [%s] Received goal", name_.c_str());
+    if (fp_server_ == nullptr || !fp_server_->is_server_active()) {
+      RCLCPP_DEBUG(get_logger(), "Action server unavailable or inactive. Stopping.");
       return;
     }
 
-    // Update the status of robot while following the path
-    flex_nav_common::FollowPathFeedback feedback;
-    feedback.pose = goal_pose_path.pose;
-    fp_server_->publishFeedback(feedback);
+    if (fp_server_->is_cancel_requested()) {
+      RCLCPP_INFO(get_logger(), "Goal was canceled. Canceling planning action.");
+      fp_server_->terminate_all();
+      return;
+    }
 
-    std::vector<geometry_msgs::PoseStamped> plan;
-    if (planner_->makePlan(goal_pose_map, goal_pose_map, plan)) {
-      if (plan.empty()) {
-        ROS_WARN("[%s] Empty path - abort goal!", name_.c_str());
-        result.code = flex_nav_common::FollowPathResult::FAILURE; // empty plan
-        fp_server_->setAborted(result, "Empty path");
+    while (running_) {
+      RCLCPP_WARN(get_logger(), "[%s] Waiting for lock", name_.c_str());
+      r.sleep();
+    }
+
+    if (goal->path.poses.empty()) {
+      RCLCPP_ERROR(get_logger(), "[%s] The path is empty!", name_.c_str());
+      result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
+      fp_server_->terminate_current(result);
+      return;
+    }
+
+    if (goal->path.header.frame_id == "") {
+      RCLCPP_ERROR(get_logger(), "[%s] The frame_id is empty!", name_.c_str());
+      result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
+      fp_server_->terminate_current(result);
+      return;
+    }
+
+    RCLCPP_INFO(get_logger(), " [%s] Ready to process latest goal Preempt Requested(%d)",
+                name_.c_str(),
+                fp_server_->is_cancel_requested());
+
+    running_ = true;
+    while (running_ && rclcpp::ok() && !fp_server_->is_cancel_requested()) {
+      geometry_msgs::msg::PoseStamped start_pose;
+      geometry_msgs::msg::PoseStamped goal_pose = goal->path.poses.back();
+      geometry_msgs::msg::PoseStamped goal_pose_map = goal_pose;
+
+      // Get the current robot pose from costmap
+      if (!costmap_ros_->getRobotPose(start_pose)) {
+        fp_server_->terminate_current();
+        return;
+      }
+
+      // Convert the goal point from path frame to global frame
+      if (goal->path.header.frame_id != global_frame_) {
+        // goal_pose_map gets the transformed goal pose
+        goal_pose_map.header.stamp = steady_clock_.now();
+        if (!transformRobot(*tf_, goal_pose, goal_pose_map, global_frame_)) {
+          RCLCPP_ERROR(get_logger(), "[%s] No valid transform for the goal point found along path",
+                       name_.c_str());
+
+          result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
+          fp_server_->terminate_current(result);
+          running_ = false;
+          return;
+        }
+      }
+
+      nav2_costmap_2d::Costmap2D *costmap = costmap_ros_->getCostmap();
+      double threshold = distance_threshold_ * costmap->getResolution();
+      if (distanceSquared(start_pose, goal_pose) <= threshold * threshold) {
+        RCLCPP_INFO(get_logger(), "[%s] Reached goal - Success!", name_.c_str());
+        result->code = flex_nav_common::action::FollowPath::Result::SUCCESS;
+        fp_server_->succeeded_current(result);
         running_ = false;
         return;
       }
-    } else {
-      ROS_WARN("[%s] Failed to make plan - abort goal!", name_.c_str());
-      result.code =
-          flex_nav_common::FollowPathResult::FAILURE; // failed to make plan
-      fp_server_->setAborted(result, "Failed to make plan");
-      running_ = false;
-      return;
+
+      // Update the status of robot while following the path
+      auto feedback = std::make_shared<FollowPathAction::Feedback>();
+      feedback->pose = goal_pose.pose;
+      fp_server_->publish_feedback(feedback);
+
+      nav_msgs::msg::Path path = planner_->createPlan(start_pose, goal_pose_map);
+      if (!path.poses.empty()) {
+        plan_publisher_->publish(std::move(path));
+      }
+      else {
+        RCLCPP_WARN(get_logger(), "[%s] Empty path - abort goal!", name_.c_str());
+
+        result->code = flex_nav_common::action::FollowPath::Result::FAILURE; // empty plan
+        fp_server_->terminate_current(result);
+        running_ = false;
+        return;
+      }
+
+      r.sleep();
     }
 
-    r.sleep();
+    if (fp_server_->is_cancel_requested()) {
+      RCLCPP_WARN(get_logger(), "[%s] Preempt requested - preempting goal ...", name_.c_str());
+
+      result->code = flex_nav_common::action::FollowPath::Result::CANCEL;
+      fp_server_->terminate_current(result);
+    }
+    else {
+      RCLCPP_ERROR(get_logger(), "[%s] Aborting for unknown reason!", name_.c_str());
+      result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
+      fp_server_->terminate_current(result);
+    }
+
+    running_ = false;
   }
 
-  if (fp_server_->isPreemptRequested()) {
-    ROS_WARN("[%s] Preempt requested - preempting goal ...", name_.c_str());
-    fp_server_->setPreempted(result, "Preempting goal");
-  } else if (fp_server_->isNewGoalAvailable()) {
-    ROS_WARN("[%s] New goal available  - preempting goal ...", name_.c_str());
-    fp_server_->setPreempted(result, "Preempting goal");
-  } else {
-    ROS_ERROR("[%s] Aborting for unknown reason!", name_.c_str());
-    fp_server_->setAborted(result, " Aborting for unknown reason!");
+  void FollowPath::clear_costmap() {
+    auto goal = cc_server_->get_current_goal();
+    costmap_ros_->resetLayers();
+    std::shared_ptr<flex_nav_common::action::ClearCostmap::Result> result =
+      std::make_shared<flex_nav_common::action::ClearCostmap::Result>();
+    result->code = flex_nav_common::action::ClearCostmap::Result::SUCCESS;
+    cc_server_->succeeded_current(result);
   }
-  running_ = false;
-}
-
-void FollowPath::clear_costmap(
-    const flex_nav_common::ClearCostmapGoalConstPtr &goal) {
-  costmap_->resetLayers();
-
-  flex_nav_common::ClearCostmapResult result;
-  result.code = flex_nav_common::ClearCostmapResult::SUCCESS;
-  cc_server_->setSucceeded(result, "Success");
-}
 }
