@@ -26,7 +26,6 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <exec_depend>flex_nav_common</exec_depend>
-  <exec_depend>flex_nav_util</exec_depend>
   <exec_depend>flex_nav_flexbe_states</exec_depend>
   <exec_depend>flex_nav_controllers</exec_depend>
   <exec_depend>flex_nav_planners</exec_depend>

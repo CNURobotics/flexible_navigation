@@ -41,8 +41,6 @@ import math
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
 from flexbe_core.proxy import ProxySubscriberCached
-from flexbe_core.proxy import ProxyServiceCaller
-from flexbe_core.proxy import ProxyActionClient
 
 from geometry_msgs.msg import TwistStamped, Point, PointStamped
 from nav_msgs.msg import Odometry
@@ -78,8 +76,6 @@ class MoveDistanceState(EventState):
 
         ProxyPublisher._initialize(MoveDistanceState._node)
         ProxySubscriberCached._initialize(MoveDistanceState._node)
-        ProxyActionClient._initialize(MoveDistanceState._node)
-        ProxyServiceCaller._initialize(MoveDistanceState._node)
 
         self._cmd_topic    = cmd_topic
         self._pub          = ProxyPublisher(       {self._cmd_topic: TwistStamped})

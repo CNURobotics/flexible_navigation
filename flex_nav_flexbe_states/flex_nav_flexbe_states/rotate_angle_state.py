@@ -43,9 +43,6 @@ from rclpy.duration import Duration
 
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
-from flexbe_core.proxy import ProxySubscriberCached
-from flexbe_core.proxy import ProxyServiceCaller
-from flexbe_core.proxy import ProxyActionClient
 
 from geometry_msgs.msg import TwistStamped, Point, PointStamped
 from nav_msgs.msg import Odometry
@@ -65,9 +62,6 @@ class RotateAngleState(EventState):
         super(RotateAngleState, self).__init__(outcomes = ['done'])
 
         ProxyPublisher._initialize(RotateAngleState._node)
-        ProxySubscriberCached._initialize(RotateAngleState._node)
-        ProxyActionClient._initialize(RotateAngleState._node)
-        ProxyServiceCaller._initialize(RotateAngleState._node)
 
         self._target_time           = Duration(seconds=target_time)
         self._target_angle          = target_angle*3.141593/180.0

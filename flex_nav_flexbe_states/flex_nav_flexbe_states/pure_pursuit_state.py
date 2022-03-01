@@ -50,8 +50,6 @@ from functools import partial
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
 from flexbe_core.proxy import ProxySubscriberCached
-from flexbe_core.proxy import ProxyServiceCaller
-from flexbe_core.proxy import ProxyActionClient
 
 from geometry_msgs.msg import TwistStamped, Point, PointStamped, Vector3
 from nav_msgs.msg import Odometry
@@ -104,8 +102,6 @@ class PurePursuitState(EventState):
 
         ProxyPublisher._initialize(PurePursuitState._node)
         ProxySubscriberCached._initialize(PurePursuitState._node)
-        ProxyActionClient._initialize(PurePursuitState._node)
-        ProxyServiceCaller._initialize(PurePursuitState._node)
 
         # Store state parameter for later use.
         self._twist                 = TwistStamped()

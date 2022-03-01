@@ -36,7 +36,7 @@
 ###############################################################################
 
 from flexbe_core import EventState, Logger
-from flexbe_core.proxy import ProxyServiceCaller, ProxyActionClient
+from flexbe_core.proxy import ProxyActionClient
 
 from flex_nav_common.action import *
 
@@ -61,7 +61,6 @@ class FollowPathState(EventState):
         super(FollowPathState, self).__init__(outcomes=['done', 'failed', 'canceled'], input_keys=['plan'])
 
         ProxyActionClient._initialize(FollowPathState._node)
-        ProxyServiceCaller._initialize(FollowPathState._node)
 
         self._action_topic = topic
         self._client = ProxyActionClient({self._action_topic: FollowPath})

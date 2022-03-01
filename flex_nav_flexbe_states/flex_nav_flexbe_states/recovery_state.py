@@ -39,12 +39,8 @@ import importlib
 import rosidl_runtime_py.set_message
 
 from flexbe_core import EventState, Logger
-from flexbe_core.proxy import ProxyServiceCaller, ProxyActionClient
 from geometry_msgs.msg import TwistStamped
 
-from flexbe_core.proxy import ProxyPublisher
-from flexbe_core.proxy import ProxySubscriberCached
-from flexbe_core.proxy import ProxyServiceCaller
 from flexbe_core.proxy import ProxyActionClient
 
 class RecoveryState(EventState):
@@ -74,7 +70,6 @@ class RecoveryState(EventState):
         self._timeout = timeout
         self._return  = None
         ProxyActionClient._initialize(RecoveryState._node)
-        ProxyServiceCaller._initialize(RecoveryState._node)
 
         self._client = ProxyActionClient({self._topic: self.action_class})
 

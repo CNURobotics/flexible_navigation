@@ -39,9 +39,6 @@ import rclpy
 from rclpy.duration import Duration
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
-from flexbe_core.proxy import ProxySubscriberCached
-from flexbe_core.proxy import ProxyServiceCaller
-from flexbe_core.proxy import ProxyActionClient
 
 from geometry_msgs.msg import TwistStamped
 from geometry_msgs.msg import Twist
@@ -63,20 +60,12 @@ class TimedTwistState(EventState):
         super(TimedTwistState, self).__init__(outcomes = ['done'])
 
         ProxyPublisher._initialize(TimedTwistState._node)
-        ProxySubscriberCached._initialize(TimedTwistState._node)
-        ProxyActionClient._initialize(TimedTwistState._node)
-        ProxyServiceCaller._initialize(TimedTwistState._node)
 
         # Store state parameter for later use.
         self._target_time           = Duration(seconds=target_time)
-        # self._twist                 = TwistStamped()
-        self._twist                 = Twist()
-
-        # self._twist.twist.linear.x  = velocity
-        # self._twist.twist.angular.z = rotation_rate
-
-        self._twist.linear.x  = velocity
-        self._twist.angular.z = rotation_rate
+        self._twist                 = TwistStamped()
+        self._twist.twist.linear.x  = velocity
+        self._twist.twist.angular.z = rotation_rate
 
         # The constructor is called when building the state machine, not when actually starting the behavior.
         # Thus, we cannot save the starting time now and will do so later.
@@ -106,7 +95,7 @@ class TimedTwistState(EventState):
             return 'done'
 
         # Normal operation
-        # self._twist.header.stamp = self._node.get_clock().now().to_msg()  # update the timestamp
+        self._twist.header.stamp = self._node.get_clock().now().to_msg()  # update the timestamp
         self._pub.publish(self._cmd_topic, self._twist)
         return None
 

@@ -38,12 +38,8 @@
 import traceback
 
 from flexbe_core import EventState, Logger
-from flexbe_core.proxy import ProxyServiceCaller, ProxyActionClient
 from geometry_msgs.msg import TwistStamped
 
-from flexbe_core.proxy import ProxyPublisher
-from flexbe_core.proxy import ProxySubscriberCached
-from flexbe_core.proxy import ProxyServiceCaller
 from flexbe_core.proxy import ProxyActionClient
 
 from flex_nav_common.action import *
@@ -67,7 +63,6 @@ class ClearCostmapsState(EventState):
         self._clients_list = []
         self._costmaps_cleared = []
         ProxyActionClient._initialize(ClearCostmapsState._node)
-        ProxyServiceCaller._initialize(ClearCostmapsState._node)
         for topic in self._topics:
             client = ProxyActionClient({topic: ClearCostmap})
             self._clients_list.append(client)

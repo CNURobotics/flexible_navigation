@@ -36,7 +36,7 @@
 ###############################################################################
 
 from flexbe_core import EventState, Logger
-from flexbe_core.proxy import ProxyActionClient, ProxySubscriberCached
+from flexbe_core.proxy import ProxyActionClient
 
 from flex_nav_common.action import *
 from nav_msgs.msg import Path
@@ -62,7 +62,6 @@ class FollowTopicState(EventState):
         super(FollowTopicState, self).__init__(outcomes=['done', 'failed', 'canceled'])
 
         ProxyActionClient._initialize(FollowTopicState._node)
-        ProxySubscriberCached._initialize(FollowTopicState._node)
 
         self._planner_topic = planner_topic
         self._controller_topic = controller_topic

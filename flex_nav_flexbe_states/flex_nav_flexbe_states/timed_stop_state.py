@@ -40,8 +40,6 @@ from rclpy.duration import Duration
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
 from flexbe_core.proxy import ProxySubscriberCached
-from flexbe_core.proxy import ProxyServiceCaller
-from flexbe_core.proxy import ProxyActionClient
 
 from geometry_msgs.msg import TwistStamped
 from geometry_msgs.msg import Twist
@@ -66,8 +64,6 @@ class TimedStopState(EventState):
 
         ProxyPublisher._initialize(TimedStopState._node)
         ProxySubscriberCached._initialize(TimedStopState._node)
-        ProxyActionClient._initialize(TimedStopState._node)
-        ProxyServiceCaller._initialize(TimedStopState._node)
 
         # Store state parameter for later use.
         self._timeout           = Duration(seconds=timeout)
