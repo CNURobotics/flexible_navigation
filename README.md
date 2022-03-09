@@ -1,6 +1,15 @@
 Flexible Navigation
 ===================
 
+NOTE: As of 9-March-2022 development of the ROS 2 version of Flexible Navigation
+will be maintained at https://github.com/FlexBE/flexible_navigation.
+
+It is suggested that you migrate to there for new ROS 1 work as well.
+
+This site is being maintained for historical reasons, but future work should use
+the https://github.com/FlexBE site, which will be the one-stop shop for all
+things FlexBE going forward.
+
 Flexible Navigation is a rework of the ROS Navigation stack into independent modules that
 interface with [FlexBE] compatible state implementations.  These allow a user to graphically chain together states in a state machine to essentially create their own navigation stack to suit any need.
 
@@ -29,7 +38,7 @@ should first follow the [ROS Install Guide] and get that set up before proceedin
 License
 -------
 
-	Copyright (c) 2016-2019
+	Copyright (c) 2016-2022
 	Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 	Christopher Newport University
 
