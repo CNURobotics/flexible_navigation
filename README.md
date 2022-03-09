@@ -31,6 +31,15 @@ An alternative demonstration uses a three layer planning scheme to demonstrate t
 The Flexible Navigation system has been tested using the latest version of ROS2 Foxy.
 You should first follow the [ROS2 Install Guide] and get that set up before proceeding.
 
+## Publications
+
+Please use the following publications for reference when using Flexible Navigation:
+
+- David C. Conner and Justin Willis, ["Flexible Navigation: Finite state machine-based integrated navigation and control for ROS enabled robots,"](http://dx.doi.org/10.1109/SECON.2017.7925266) SoutheastCon 2017.
+
+- Joshua Zutell, David C. Conner and Philipp Schillinger, "ROS 2-Based Flexible Behavior Engine for Flexible Navigation ," to appear, SoutheastCon 2022.
+
+
 License
 -------
 
