@@ -3,9 +3,11 @@ Flexible Navigation
 
 Flexible Navigation is a rework of the ROS2 Navigation2 stack into independent modules that
 interface with [FlexBE App] and [FlexBE Behavior Engine] compatible state implementations.  
-These allow a user to graphically chain together states in a state machine to essentially create their own navigation stack to suit any need.
+These allow a user to graphically chain together states in a state machine to essentially
+create their own navigation stack to suit any need.
 
-This allows for supervisory and sliding autonomy within navigation, and better control over contingencies and recovery behaviors.
+This allows for supervisory and sliding autonomy within navigation, and better
+control over contingencies and recovery behaviors.
 
 About
 -----
@@ -20,15 +22,32 @@ interfaces to [FlexBE App] state implementations.
 Install
 -------
 
+Clone this repository to your ROS workspace.
+
+<pre>
+rosdep update
+rosdep install --from-paths src --ignore-src
+</pre>
+
+This will install the necessary dependencies, primarily those associated with the ROS [Navigation2] system.
+system.
+
+Then, from the ROS workspace folder do the normal
+<pre>
+colcon build
+</pre>
+
 A complete demonstration setup for the system is provided at [Turtlebot Flexible Navigation].
 Follow setup and operation directions there for an integrated demonstration.  
 
 
 The [Turtlebot Flexible Navigation] provides two demonstrations.
-The first uses the SBPL lattice planner in a navigation2 like planning scheme.  
+The first uses a 2-level planner as a demonstration, where the
+global planner plans over the full map, and a local planner plans over smaller window.
+
 An alternative demonstration uses a three layer planning scheme to demonstrate the flexibility of the decoupled approach.
 
-The Flexible Navigation system has been tested using the latest version of ROS2 Foxy.
+The Flexible Navigation system has been tested using the latest version of ROS2 Foxy on Ubuntu 20.04.
 You should first follow the [ROS2 Install Guide] and get that set up before proceeding.
 
 ## Publications
@@ -88,4 +107,4 @@ License
 [FlexBE Behavior Engine]: https://github.com/FlexBE/flexbe_behavior_engine.git
 [Navigation2]: https://github.com/ros-planning/navigation2
 [ROS2 Install Guide]: https://docs.ros.org/en/foxy/Installation.html
-[Turtlebot Flexible Navigation]: https://github.com/FlexBE/flex_nav_turtlebot
+[Turtlebot Flexible Navigation]: https://github.com/FlexBE/flex_nav_turtlebot3_demo
