@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2022
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -52,8 +52,8 @@ namespace flex_nav {
 
     using namespace std::placeholders;
 
-    declare_parameter("planner_plugin", default_id_);
-    declare_parameter("expected_planner_frequency", 1.0);
+    declare_parameter("planner_plugin", rclcpp::ParameterValue(default_id_));
+    declare_parameter("expected_planner_frequency", rclcpp::ParameterValue(1.0));
 
     costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
       "global_costmap", std::string{get_namespace()}, "global_costmap");
@@ -70,34 +70,37 @@ namespace flex_nav {
   GetPath::on_configure(const rclcpp_lifecycle::State & state)
   {
     name_ = this->get_name();
+    RCLCPP_INFO(get_logger(), "Configuring %s ... ", name_.c_str());
     gp_server_ = std::make_unique<GetPathActionServer>(
       rclcpp_node_,
       name_,
       std::bind(&GetPath::execute, this));
 
+    RCLCPP_DEBUG(get_logger(), "Configuring %s cc server ... ", name_.c_str());
     cc_server_ = std::make_unique<ClearCostmapActionServer>(
       rclcpp_node_,
       name_ + "/clear_costmap",
       std::bind(&GetPath::clear_costmap, this));
 
-    RCLCPP_INFO(get_logger(), "Configuring");
+    RCLCPP_DEBUG(get_logger(), "Configuring %s costmap_ros ... ", name_.c_str());
 
     costmap_ros_->on_configure(state);
     costmap_ = costmap_ros_->getCostmap();
 
-    RCLCPP_DEBUG(get_logger(), "Costmap size: %d,%d",
+    RCLCPP_INFO(get_logger(), "Costmap size: %d,%d",
       costmap_->getSizeInCellsX(), costmap_->getSizeInCellsY());
 
     tf_ = costmap_ros_->getTfBuffer();
 
+    RCLCPP_DEBUG(get_logger(), "Configuring %s planner plugin ... ", name_.c_str());
     get_parameter("planner_plugin", planner_id_);
     if (planner_id_ == default_id_) {
-      declare_parameter(default_id_ + ".plugin", default_type_);
+      declare_parameter(default_id_ + ".plugin", rclcpp::ParameterValue(default_type_));
     }
 
     auto node = shared_from_this();
 
-    RCLCPP_INFO(get_logger(), "Costmap global frame = " + costmap_ros_->getGlobalFrameID());
+    RCLCPP_INFO(get_logger(), "Costmap %s global frame = %s", name_.c_str(),  costmap_ros_->getGlobalFrameID().c_str());
     try {
       planner_type_ = nav2_util::get_plugin_type_param(node, planner_id_);
       planner_ = gp_loader_.createUniqueInstance(planner_type_);
@@ -121,29 +124,38 @@ namespace flex_nav {
       max_planner_duration_ = 0.0;
     }
 
+    RCLCPP_DEBUG(get_logger(), "Create %s plan publisher ... ", name_.c_str());
+
     plan_publisher_ = create_publisher<nav_msgs::msg::Path>(name_ + "/plan", 1);
 
+    RCLCPP_DEBUG(get_logger(), "Configure SUCCESS for %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
   nav2_util::CallbackReturn
   GetPath::on_activate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Activating");
+    RCLCPP_INFO(get_logger(), "Activating %s", name_.c_str());
     plan_publisher_->on_activate();
     gp_server_->activate();
     cc_server_->activate();
+    RCLCPP_INFO(get_logger(), "  Activating  cost map for %s", name_.c_str());
     costmap_ros_->on_activate(state);
 
+    RCLCPP_INFO(get_logger(), "   Activating planner for %s", name_.c_str());
     planner_->activate();
 
+    // create bond connection with nav2_util::LifeCycle manager
+    //Galactic createBond();
+
+    RCLCPP_DEBUG(get_logger(), "Activating SUCCESS for %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
   nav2_util::CallbackReturn
   GetPath::on_deactivate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Deactivating");
+    RCLCPP_INFO(get_logger(), "Deactivating %s", name_.c_str());
     plan_publisher_->on_deactivate();
     gp_server_->deactivate();
     cc_server_->deactivate();
@@ -151,13 +163,16 @@ namespace flex_nav {
 
     planner_->deactivate();
 
+    // destroy bond connection with nav2_util::LifeCycle manager
+    //Galactic destroyBond();
+
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
   nav2_util::CallbackReturn
   GetPath::on_cleanup(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Cleaning up");
+    RCLCPP_INFO(get_logger(), "Cleaning up %s", name_.c_str());
     plan_publisher_.reset();
     gp_server_.reset();
     cc_server_.reset();
@@ -173,7 +188,7 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   GetPath::on_shutdown(const rclcpp_lifecycle::State &)
   {
-    RCLCPP_INFO(get_logger(), "Shutting down");
+    RCLCPP_INFO(get_logger(), "Shutting down %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 

@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2022
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -63,6 +63,7 @@
 #include "nav2_util/robot_utils.hpp"
 #include "nav2_util/node_utils.hpp"
 #include "dwb_core/dwb_local_planner.hpp"
+
 #include <pluginlib/class_loader.hpp>
 
 namespace flex_nav {

@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2022
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -58,15 +58,15 @@ namespace flex_nav {
         name_("follow_topic") {
     using namespace std::placeholders;
 
-    declare_parameter("controller_frequency", 20.0);
-    declare_parameter("progress_checker_plugin", default_progress_checker_id_);
-    declare_parameter("goal_checker_plugin", default_goal_checker_id_);
-    declare_parameter("controller_plugin", default_id_);
+    declare_parameter("controller_frequency", rclcpp::ParameterValue(20.0));
+    declare_parameter("progress_checker_plugin", rclcpp::ParameterValue(default_progress_checker_id_));
+    declare_parameter("goal_checker_plugin", rclcpp::ParameterValue(default_goal_checker_id_));
+    declare_parameter("controller_plugin", rclcpp::ParameterValue(default_id_));
     declare_parameter("min_x_velocity_threshold", rclcpp::ParameterValue(0.0001));
     declare_parameter("min_y_velocity_threshold", rclcpp::ParameterValue(0.0001));
     declare_parameter("min_theta_velocity_threshold", rclcpp::ParameterValue(0.0001));
-    declare_parameter("velocity_publisher", "");
-    declare_parameter("velocity_stamp_publisher", "");
+    declare_parameter("velocity_publisher", rclcpp::ParameterValue(""));
+    declare_parameter("velocity_stamp_publisher", rclcpp::ParameterValue(""));
 
     costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
       "local_costmap", std::string{get_namespace()}, "local_costmap");
@@ -84,6 +84,8 @@ namespace flex_nav {
   FollowTopic::on_configure(const rclcpp_lifecycle::State & state)
   {
     name_ = this->get_name();
+    RCLCPP_INFO(get_logger(), "Configuring  %s", name_.c_str());
+
     ft_server_ = std::make_unique<FollowTopicActionServer>(
       rclcpp_node_,
       name_,
@@ -95,8 +97,6 @@ namespace flex_nav {
       std::bind(&FollowTopic::clear_costmap, this));
 
     auto node = shared_from_this();
-
-    RCLCPP_INFO(get_logger(), "Configuring controller interface");
 
     get_parameter("progress_checker_plugin", progress_checker_id_);
     if (progress_checker_id_ == default_progress_checker_id_) {
@@ -183,7 +183,7 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowTopic::on_activate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Activating");
+    RCLCPP_INFO(get_logger(), "Activating %s", name_.c_str());
 
     costmap_ros_->on_activate(state);
     controller_->activate();
@@ -202,13 +202,16 @@ namespace flex_nav {
       vel_publisher_->on_activate();
     }
 
+    // create bond connection with nav2_util::LifeCycle manager
+    //Galactic createBond();
+
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
   nav2_util::CallbackReturn
   FollowTopic::on_deactivate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Deactivating");
+    RCLCPP_INFO(get_logger(), "Deactivating %s", name_.c_str());
     controller_->deactivate();
     ft_server_->deactivate();
     cc_server_->deactivate();
@@ -228,13 +231,16 @@ namespace flex_nav {
       vel_publisher_->on_deactivate();
     }
 
+    // destroy bond connection
+    //Galactic destroyBond();
+
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
   nav2_util::CallbackReturn
   FollowTopic::on_cleanup(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Cleaning up");
+    RCLCPP_INFO(get_logger(), "Cleaning up %s", name_.c_str());
     controller_->cleanup();
     costmap_ros_->on_cleanup(state);
 
@@ -251,7 +257,7 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowTopic::on_shutdown(const rclcpp_lifecycle::State &)
   {
-    RCLCPP_INFO(get_logger(), "Shutting down");
+    RCLCPP_INFO(get_logger(), "Shutting down %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
@@ -264,7 +270,9 @@ namespace flex_nav {
 
     auto end_pose = path.poses.back();
     end_pose.header.frame_id = path.header.frame_id;
-    rclcpp::Duration tolerance(costmap_ros_->getTransformTolerance() * 1e9);
+    // Galactic rclcpp::Duration tolerance = rclcpp::Duration::from_nanoseconds(costmap_ros_->getTransformTolerance() * 1e9);
+    rclcpp::Duration tolerance(costmap_ros_->getTransformTolerance() * 1e9); // Foxy
+
     nav_2d_utils::transformPose(costmap_ros_->getTfBuffer(), costmap_ros_->getGlobalFrameID(),
       end_pose, end_pose, tolerance);
     goal_checker_->reset();
@@ -313,7 +321,9 @@ namespace flex_nav {
 
     nav_2d_msgs::msg::Twist2D twist = odom_sub_->getTwist();
 
-    auto cmd_vel_2d = controller_->computeVelocityCommands(pose, nav_2d_utils::twist2Dto3D(twist));
+    auto cmd_vel_2d = controller_->computeVelocityCommands(pose,
+                                                           nav_2d_utils::twist2Dto3D(twist)); // Foxy,
+                                                           // Galactic goal_checker_.get());
     publishVelocity(cmd_vel_2d, pose);
   }
 
@@ -397,7 +407,7 @@ namespace flex_nav {
       good = true;
     }
     catch(std::exception& e) {
-      RCLCPP_WARN(get_logger(), "Unable to create subscription [%s]");
+      RCLCPP_WARN(get_logger(), "Unable to create subscription [%s]", goal->topic.data.c_str());
       good = false;
     }
 
@@ -447,8 +457,7 @@ namespace flex_nav {
       while(current_path_.header.stamp == latest_path_.header.stamp && running_ &&
         rclcpp::ok() && !ft_server_->is_cancel_requested()) {
 
-          RCLCPP_DEBUG(get_logger(), "[%s] Generating path from path: #%u", name_.c_str(),
-            current_path_.header);
+          RCLCPP_DEBUG(get_logger(), "[%s] Generating path from path", name_.c_str());
 
           if (isGoalReached()) {
             RCLCPP_INFO(get_logger(), "Reached goal - Success!");
@@ -514,9 +523,9 @@ namespace flex_nav {
   }
 
   void FollowTopic::topic_cb(const nav_msgs::msg::Path::SharedPtr data) {
-    RCLCPP_DEBUG(get_logger(), "[%s] Recieved a new path with %lu points: #%u",
+      RCLCPP_DEBUG(get_logger(), "[%s] Received a new path with %lu points",
       name_.c_str(),
-      data->poses.size(), data->header);
+      data->poses.size());
 
     latest_path_ = *data;
   }

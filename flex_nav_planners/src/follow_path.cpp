@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2022
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -51,11 +51,11 @@ namespace flex_nav {
         {
     using namespace std::placeholders;
 
-    declare_parameter("planner_plugin", default_id_);
-    declare_parameter("expected_planner_frequency", 1.0);
-    declare_parameter("distance_threshold", 5.0);
-    declare_parameter("costmap_name", "middle_costmap");
-    declare_parameter("global_frame", "map");
+    declare_parameter("planner_plugin", rclcpp::ParameterValue(default_id_));
+    declare_parameter("expected_planner_frequency", rclcpp::ParameterValue(1.0));
+    declare_parameter("distance_threshold", rclcpp::ParameterValue(5.0));
+    declare_parameter("costmap_name", rclcpp::ParameterValue("middle_costmap"));
+    declare_parameter("global_frame", rclcpp::ParameterValue("map"));
 
     get_parameter("costmap_name", costmap_name_);
     get_parameter("global_frame", global_frame_);
@@ -75,6 +75,7 @@ namespace flex_nav {
   FollowPath::on_configure(const rclcpp_lifecycle::State & state)
   {
     name_ = this->get_name();
+    RCLCPP_INFO(get_logger(), "Configuring %s", name_.c_str());
     fp_server_ = std::make_unique<FollowPathActionServer>(
       rclcpp_node_,
       name_,
@@ -85,7 +86,6 @@ namespace flex_nav {
       name_ + "/clear_costmap",
       std::bind(&FollowPath::clear_costmap, this));
 
-    RCLCPP_INFO(get_logger(), "Configuring");
     get_parameter("expected_planner_frequency", expected_planner_frequency_);
     get_parameter("distance_threshold", distance_threshold_);
 
@@ -133,12 +133,15 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowPath::on_activate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Activating");
+    RCLCPP_INFO(get_logger(), "Activating %s", name_.c_str());
     plan_publisher_->on_activate();
     fp_server_->activate();
     cc_server_->activate();
     costmap_ros_->on_activate(state);
     planner_->activate();
+
+    // create bond connection with nav2_util::LifeCycle manager
+    //Galactic createBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -146,12 +149,15 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowPath::on_deactivate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Deactivating");
+    RCLCPP_INFO(get_logger(), "Deactivating %s", name_.c_str());
     plan_publisher_->on_deactivate();
     fp_server_->deactivate();
     cc_server_->deactivate();
     costmap_ros_->on_deactivate(state);
     planner_->deactivate();
+
+    // destroy bond connection with nav2_util::LifeCycle manager
+    //Galactic destroyBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -159,7 +165,7 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowPath::on_cleanup(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Cleaning up");
+    RCLCPP_INFO(get_logger(), "Cleaning up %s", name_.c_str());
     plan_publisher_.reset();
     fp_server_.reset();
     cc_server_.reset();
@@ -174,7 +180,7 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowPath::on_shutdown(const rclcpp_lifecycle::State &)
   {
-    RCLCPP_INFO(get_logger(), "Shutting down");
+    RCLCPP_INFO(get_logger(), "Shutting down %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 

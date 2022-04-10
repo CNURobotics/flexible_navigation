@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2022
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -58,10 +58,10 @@ namespace flex_nav {
         running_(false) {
     using namespace std::placeholders;
 
-    declare_parameter("planner_plugin", default_id_);
-    declare_parameter("distance_threshold", 5.0);
-    declare_parameter("expected_planner_frequency", 1.0);
-    declare_parameter("costmap_name", "low_middle_costmap");
+    declare_parameter("planner_plugin", rclcpp::ParameterValue(default_id_));
+    declare_parameter("distance_threshold", rclcpp::ParameterValue(5.0));
+    declare_parameter("expected_planner_frequency", rclcpp::ParameterValue(1.0));
+    declare_parameter("costmap_name", rclcpp::ParameterValue("low_middle_costmap"));
 
     get_parameter("costmap_name", costmap_name_);
 
@@ -80,6 +80,7 @@ namespace flex_nav {
   FollowTopic::on_configure(const rclcpp_lifecycle::State & state)
   {
     name_ = this->get_name();
+    RCLCPP_INFO(get_logger(), "Configuring %s", name_.c_str());
     ft_server_ = std::make_unique<FollowTopicActionServer>(
       rclcpp_node_,
       name_,
@@ -90,7 +91,6 @@ namespace flex_nav {
       name_ + "/clear_costmap",
       std::bind(&FollowTopic::clear_costmap, this));
 
-    RCLCPP_INFO(get_logger(), "Configuring");
     get_parameter("expected_planner_frequency", expected_planner_frequency_);
     get_parameter("distance_threshold", distance_threshold_);
 
@@ -104,7 +104,7 @@ namespace flex_nav {
 
     get_parameter("planner_plugin", planner_id_);
     if (planner_id_ == default_id_) {
-      declare_parameter(default_id_ + ".plugin", default_type_);
+      declare_parameter(default_id_ + ".plugin", rclcpp::ParameterValue(default_type_));
     }
 
     auto node = shared_from_this();
@@ -140,12 +140,15 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowTopic::on_activate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Activating");
+    RCLCPP_INFO(get_logger(), "Activating %s", name_.c_str());
     plan_publisher_->on_activate();
     ft_server_->activate();
     cc_server_->activate();
     costmap_ros_->on_activate(state);
     planner_->activate();
+
+    // create bond connection with nav2_util::LifeCycle manager
+    //Galactic createBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -153,12 +156,15 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowTopic::on_deactivate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Deactivating");
+    RCLCPP_INFO(get_logger(), "Deactivating %s", name_.c_str());
     plan_publisher_->on_deactivate();
     ft_server_->deactivate();
     cc_server_->deactivate();
     costmap_ros_->on_deactivate(state);
     planner_->deactivate();
+
+    // destroy bond connection with nav2_util::LifeCycle manager
+    //Galactic destroyBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -166,7 +172,7 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowTopic::on_cleanup(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Cleaning up");
+    RCLCPP_INFO(get_logger(), "Cleaning up %s", name_.c_str());
     plan_publisher_.reset();
     ft_server_.reset();
     cc_server_.reset();
@@ -181,7 +187,7 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowTopic::on_shutdown(const rclcpp_lifecycle::State &)
   {
-    RCLCPP_INFO(get_logger(), "Shutting down");
+    RCLCPP_INFO(get_logger(), "Shutting down %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
@@ -213,7 +219,7 @@ namespace flex_nav {
       good = true;
     }
     catch(std::exception& e) {
-      RCLCPP_WARN(get_logger(), "Unable to create subscription [%s]");
+      RCLCPP_WARN(get_logger(), "Unable to create subscription [%s]", name_.c_str());
       good = false;
     }
 
@@ -261,8 +267,7 @@ namespace flex_nav {
 
       result->pose = start_pose.pose;
 
-      RCLCPP_DEBUG(get_logger(), "[%s] Generating path from path: #%u", name_.c_str(),
-        current_path_.header);
+      RCLCPP_DEBUG(get_logger(), "[%s] Generating path from path", name_.c_str());
 
       nav2_costmap_2d::Costmap2D *costmap = costmap_ros_->getCostmap();
       double threshold = distance_threshold_ * costmap->getResolution();
@@ -306,8 +311,8 @@ namespace flex_nav {
   }
 
   void FollowTopic::topic_cb(const nav_msgs::msg::Path::SharedPtr data) {
-    RCLCPP_DEBUG(get_logger(), "[%s] Recieved a new path with %lu points: #%u", name_.c_str(),
-      data->poses.size(), data->header);
+    RCLCPP_DEBUG(get_logger(), "[%s] Recieved a new path with %lu points",
+                      name_.c_str(), data->poses.size());
 
     latest_path_ = *data;
   }

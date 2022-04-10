@@ -1,3 +1,6 @@
+// Copyright (c) 2022
+//    Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
+//     Christopher Newport University
 // Copyright (c) 2018 Intel Corporation
 // Copyright (c) 2019 Samsung Research America
 //
@@ -22,7 +25,7 @@
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  auto recoveries_node = std::make_shared<recovery_server::RecoveryServer>();
+  auto recoveries_node = std::make_shared<flex_nav_recovery_server::RecoveryServer>();
 
   rclcpp::spin(recoveries_node->get_node_base_interface());
   rclcpp::shutdown();

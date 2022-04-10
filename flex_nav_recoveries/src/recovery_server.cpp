@@ -1,3 +1,6 @@
+// Copyright (c) 2022
+//    Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
+//     Christopher Newport University
 // Copyright (c) 2018 Samsung Research America
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,13 +20,13 @@
 #include <vector>
 #include <utility>
 #include "nav2_util/node_utils.hpp"
-#include "nav2_recoveries/recovery_server.hpp"
+#include "flex_nav_recoveries/recovery_server.hpp"
 
-namespace recovery_server
+namespace flex_nav_recovery_server
 {
 
 RecoveryServer::RecoveryServer()
-: LifecycleNode("recoveries_server", "", true),
+: nav2_util::LifecycleNode("recoveries_server", "", true),
   plugin_loader_("nav2_core", "nav2_core::Recovery"),
   default_ids_{"spin", "backup", "wait"},
   default_types_{"nav2_recoveries/Spin", "nav2_recoveries/BackUp", "nav2_recoveries/Wait"}
@@ -35,7 +38,7 @@ RecoveryServer::RecoveryServer()
     "footprint_topic",
     rclcpp::ParameterValue(std::string("local_costmap/published_footprint")));
   declare_parameter("cycle_frequency", rclcpp::ParameterValue(10.0));
-  declare_parameter("recovery_plugins", default_ids_);
+  declare_parameter("recovery_plugins", rclcpp::ParameterValue(default_ids_));
 
   declare_parameter(
     "global_frame",
@@ -56,7 +59,8 @@ RecoveryServer::~RecoveryServer()
 nav2_util::CallbackReturn
 RecoveryServer::on_configure(const rclcpp_lifecycle::State & /*state*/)
 {
-  RCLCPP_INFO(get_logger(), "Configuring");
+  name_ = this->get_name();
+  RCLCPP_INFO(get_logger(), "Configuring %s", name_.c_str());
 
   tf_ = std::make_shared<tf2_ros::Buffer>(get_clock());
   auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
@@ -124,11 +128,14 @@ RecoveryServer::loadRecoveryPlugins()
 nav2_util::CallbackReturn
 RecoveryServer::on_activate(const rclcpp_lifecycle::State & /*state*/)
 {
-  RCLCPP_INFO(get_logger(), "Activating");
+  RCLCPP_INFO(get_logger(), "Activating %s", name_.c_str());
   std::vector<pluginlib::UniquePtr<nav2_core::Recovery>>::iterator iter;
   for (iter = recoveries_.begin(); iter != recoveries_.end(); ++iter) {
     (*iter)->activate();
   }
+
+  // create bond connection with nav2_util::LifeCycle manager
+  //Galactic createBond();
 
   return nav2_util::CallbackReturn::SUCCESS;
 }
@@ -136,12 +143,15 @@ RecoveryServer::on_activate(const rclcpp_lifecycle::State & /*state*/)
 nav2_util::CallbackReturn
 RecoveryServer::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
 {
-  RCLCPP_INFO(get_logger(), "Deactivating");
+  RCLCPP_INFO(get_logger(), "Deactivating %s", name_.c_str());
 
   std::vector<pluginlib::UniquePtr<nav2_core::Recovery>>::iterator iter;
   for (iter = recoveries_.begin(); iter != recoveries_.end(); ++iter) {
     (*iter)->deactivate();
   }
+
+  // destroy bond connection with nav2_util::LifeCycle manager
+  //Galactic destroyBond();
 
   return nav2_util::CallbackReturn::SUCCESS;
 }
@@ -149,7 +159,7 @@ RecoveryServer::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
 nav2_util::CallbackReturn
 RecoveryServer::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
 {
-  RCLCPP_INFO(get_logger(), "Cleaning up");
+  RCLCPP_INFO(get_logger(), "Cleaning up %s", name_.c_str());
 
   std::vector<pluginlib::UniquePtr<nav2_core::Recovery>>::iterator iter;
   for (iter = recoveries_.begin(); iter != recoveries_.end(); ++iter) {
@@ -169,7 +179,7 @@ RecoveryServer::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
 nav2_util::CallbackReturn
 RecoveryServer::on_shutdown(const rclcpp_lifecycle::State &)
 {
-  RCLCPP_INFO(get_logger(), "Shutting down");
+  RCLCPP_INFO(get_logger(), "Shutting down %s", name_.c_str());
   return nav2_util::CallbackReturn::SUCCESS;
 }
 

@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2022
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -61,15 +61,15 @@ namespace flex_nav {
         {
     using namespace std::placeholders;
 
-    declare_parameter("controller_frequency", 20.0);
-    declare_parameter("progress_checker_plugin", default_progress_checker_id_);
-    declare_parameter("goal_checker_plugin", default_goal_checker_id_);
-    declare_parameter("controller_plugin", default_id_);
+    declare_parameter("controller_frequency", rclcpp::ParameterValue(20.0));
+    declare_parameter("progress_checker_plugin", rclcpp::ParameterValue(default_progress_checker_id_));
+    declare_parameter("goal_checker_plugin", rclcpp::ParameterValue(default_goal_checker_id_));
+    declare_parameter("controller_plugin", rclcpp::ParameterValue(default_id_));
     declare_parameter("min_x_velocity_threshold", rclcpp::ParameterValue(0.0001));
     declare_parameter("min_y_velocity_threshold", rclcpp::ParameterValue(0.0001));
     declare_parameter("min_theta_velocity_threshold", rclcpp::ParameterValue(0.0001));
-    declare_parameter("velocity_publisher", "");
-    declare_parameter("velocity_stamp_publisher", "");
+    declare_parameter("velocity_publisher", rclcpp::ParameterValue(""));
+    declare_parameter("velocity_stamp_publisher", rclcpp::ParameterValue(""));
 
     costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
       "local_costmap", std::string{get_namespace()}, "local_costmap");
@@ -87,11 +87,14 @@ namespace flex_nav {
   FollowPath::on_configure(const rclcpp_lifecycle::State & state)
   {
     name_ = this->get_name();
+    RCLCPP_INFO(get_logger(), "Configuring %s", name_.c_str());
+
     fp_server_ = std::make_unique<FollowPathActionServer>(
       rclcpp_node_,
       name_,
       std::bind(&FollowPath::execute, this));
 
+    RCLCPP_DEBUG(get_logger(), "Configuring CM action server for %s", name_.c_str());
     cc_server_ = std::make_unique<ClearCostmapActionServer>(
       rclcpp_node_,
       name_ + "/clear_costmap",
@@ -99,7 +102,7 @@ namespace flex_nav {
 
     auto node = shared_from_this();
 
-    RCLCPP_INFO(get_logger(), "Configuring controller interface");
+    RCLCPP_DEBUG(get_logger(), "  Get parameters for controller interface %s", name_.c_str());
 
     get_parameter("progress_checker_plugin", progress_checker_id_);
     if (progress_checker_id_ == default_progress_checker_id_) {
@@ -128,12 +131,14 @@ namespace flex_nav {
     get_parameter("velocity_stamp_publisher", vel_stamp_publisher_name_);
     RCLCPP_INFO(get_logger(), "Controller frequency set to %.4fHz", controller_frequency_);
 
+    RCLCPP_DEBUG(get_logger(), "  Configure costmap for %s", name_.c_str());
     costmap_ros_->on_configure(state);
 
+    RCLCPP_DEBUG(get_logger(), "  Set up the plugings for controller interface %s", name_.c_str());
     try {
       progress_checker_type_ = nav2_util::get_plugin_type_param(node, progress_checker_id_);
       progress_checker_ = progress_checker_loader_.createUniqueInstance(progress_checker_type_);
-      RCLCPP_INFO(get_logger(), "Created progress_checker : %s of type %s",
+      RCLCPP_DEBUG(get_logger(), "Created progress_checker : %s of type %s",
         progress_checker_id_.c_str(), progress_checker_type_.c_str());
       progress_checker_->initialize(node, progress_checker_id_);
     } catch (const pluginlib::PluginlibException & ex) {
@@ -145,7 +150,7 @@ namespace flex_nav {
     try {
       goal_checker_type_ = nav2_util::get_plugin_type_param(node, goal_checker_id_);
       goal_checker_ = goal_checker_loader_.createUniqueInstance(goal_checker_type_);
-      RCLCPP_INFO(get_logger(), "Created goal_checker : %s of type %s",
+      RCLCPP_DEBUG(get_logger(), "Created goal_checker : %s of type %s",
         goal_checker_id_.c_str(), goal_checker_type_.c_str());
       goal_checker_->initialize(node, goal_checker_id_);
     } catch (const pluginlib::PluginlibException & ex) {
@@ -157,7 +162,7 @@ namespace flex_nav {
     try {
       controller_type_ = nav2_util::get_plugin_type_param(node, controller_id_);
       controller_ = lp_loader_.createUniqueInstance(controller_type_);
-      RCLCPP_INFO(get_logger(), "Created controller : %s of type %s",
+      RCLCPP_DEBUG(get_logger(), "Created controller : %s of type %s",
         controller_id_.c_str(), controller_type_.c_str());
       controller_->configure(node, controller_id_, costmap_ros_->getTfBuffer(), costmap_ros_);
     } catch (const pluginlib::PluginlibException & ex) {
@@ -166,6 +171,7 @@ namespace flex_nav {
       return nav2_util::CallbackReturn::FAILURE;
     }
 
+    RCLCPP_DEBUG(get_logger(), "  Set up odom sub for %s", name_.c_str());
     odom_sub_ = std::make_unique<nav_2d_utils::OdomSubscriber>(node);
 
     if (vel_publisher_name_ != "") {
@@ -180,18 +186,22 @@ namespace flex_nav {
       vel_publisher_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 1);
     }
 
+    RCLCPP_DEBUG(get_logger(), " Configure success for %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
   nav2_util::CallbackReturn
   FollowPath::on_activate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Activating");
+    RCLCPP_INFO(get_logger(), "Activating %s", name_.c_str());
     controller_->activate();
+
+    RCLCPP_DEBUG(get_logger(), "   Activating costmap for  %s", name_.c_str());
     costmap_ros_->on_activate(state);
     fp_server_->activate();
     cc_server_->activate();
 
+    RCLCPP_DEBUG(get_logger(), "Activating publishers for %s", name_.c_str());
     if (vel_publisher_name_ != "") {
       vel_publisher_->on_activate();
     }
@@ -204,13 +214,17 @@ namespace flex_nav {
       vel_publisher_->on_activate();
     }
 
+    // create bond connection with nav2_util::LifeCycle manager
+    //Galactic createBond();
+
+    RCLCPP_DEBUG(get_logger(), "Activated SUCCESS for %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
   nav2_util::CallbackReturn
   FollowPath::on_deactivate(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Deactivating");
+    RCLCPP_INFO(get_logger(), "Deactivating %s", name_.c_str());
     controller_->deactivate();
     fp_server_->deactivate();
     cc_server_->deactivate();
@@ -230,13 +244,16 @@ namespace flex_nav {
       vel_publisher_->on_deactivate();
     }
 
+    // destroy bond connection with nav2_util::LifeCycle manager
+    //Galactic destroyBond();
+
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
   nav2_util::CallbackReturn
   FollowPath::on_cleanup(const rclcpp_lifecycle::State & state)
   {
-    RCLCPP_INFO(get_logger(), "Cleaning up");
+    RCLCPP_INFO(get_logger(), "Cleaning up %s", name_.c_str());
     controller_->cleanup();
     costmap_ros_->on_cleanup(state);
 
@@ -253,7 +270,7 @@ namespace flex_nav {
   nav2_util::CallbackReturn
   FollowPath::on_shutdown(const rclcpp_lifecycle::State &)
   {
-    RCLCPP_INFO(get_logger(), "Shutting down");
+    RCLCPP_INFO(get_logger(), "Shutting down %s", name_.c_str());
     return nav2_util::CallbackReturn::SUCCESS;
   }
 
@@ -291,7 +308,9 @@ namespace flex_nav {
 
     auto end_pose = path.poses.back();
     end_pose.header.frame_id = path.header.frame_id;
-    rclcpp::Duration tolerance(costmap_ros_->getTransformTolerance() * 1e9);
+    // Galactic rclcpp::Duration tolerance = rclcpp::Duration::from_nanoseconds(costmap_ros_->getTransformTolerance() * 1e9);
+    rclcpp::Duration tolerance(costmap_ros_->getTransformTolerance() * 1e9); // Foxy
+
     nav_2d_utils::transformPose(
       costmap_ros_->getTfBuffer(), costmap_ros_->getGlobalFrameID(),
       end_pose, end_pose, tolerance);
@@ -319,7 +338,8 @@ namespace flex_nav {
     auto cmd_vel_2d =
       controller_->computeVelocityCommands(
       pose,
-      nav_2d_utils::twist2Dto3D(twist));
+      nav_2d_utils::twist2Dto3D(twist)); // Foxy
+      // Galactic , goal_checker_.get());
 
     publishVelocity(cmd_vel_2d, pose);
   }

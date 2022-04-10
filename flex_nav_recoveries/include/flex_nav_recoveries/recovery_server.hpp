@@ -1,3 +1,6 @@
+// Copyright (c) 2022
+//    Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
+//     Christopher Newport University
 // Copyright (c) 2018 Samsung Research America
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,10 +28,10 @@
 #include "pluginlib/class_list_macros.hpp"
 #include "nav2_core/recovery.hpp"
 
-#ifndef NAV2_RECOVERIES__RECOVERY_SERVER_HPP_
-#define NAV2_RECOVERIES__RECOVERY_SERVER_HPP_
+#ifndef FLEX_NAV_RECOVERIES__RECOVERY_SERVER_HPP_
+#define FLEX_NAV_RECOVERIES__RECOVERY_SERVER_HPP_
 
-namespace recovery_server
+namespace flex_nav_recovery_server
 {
 
 class RecoveryServer : public nav2_util::LifecycleNode
@@ -64,8 +67,10 @@ protected:
   std::shared_ptr<nav2_costmap_2d::CostmapTopicCollisionChecker> collision_checker_;
 
   double transform_tolerance_;
+  std::string name_;
+
 };
 
 }  // namespace recovery_server
 
-#endif 
+#endif
