@@ -203,7 +203,7 @@ namespace flex_nav {
     }
 
     // create bond connection with nav2_util::LifeCycle manager
-    //Galactic createBond();
+    createBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -232,7 +232,7 @@ namespace flex_nav {
     }
 
     // destroy bond connection
-    //Galactic destroyBond();
+    destroyBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -270,8 +270,7 @@ namespace flex_nav {
 
     auto end_pose = path.poses.back();
     end_pose.header.frame_id = path.header.frame_id;
-    // Galactic rclcpp::Duration tolerance = rclcpp::Duration::from_nanoseconds(costmap_ros_->getTransformTolerance() * 1e9);
-    rclcpp::Duration tolerance(costmap_ros_->getTransformTolerance() * 1e9); // Foxy
+    rclcpp::Duration tolerance = rclcpp::Duration::from_nanoseconds(costmap_ros_->getTransformTolerance() * 1e9);
 
     nav_2d_utils::transformPose(costmap_ros_->getTfBuffer(), costmap_ros_->getGlobalFrameID(),
       end_pose, end_pose, tolerance);
@@ -322,8 +321,8 @@ namespace flex_nav {
     nav_2d_msgs::msg::Twist2D twist = odom_sub_->getTwist();
 
     auto cmd_vel_2d = controller_->computeVelocityCommands(pose,
-                                                           nav_2d_utils::twist2Dto3D(twist)); // Foxy,
-                                                           // Galactic goal_checker_.get());
+                                                           nav_2d_utils::twist2Dto3D(twist),
+                                                           goal_checker_.get());
     publishVelocity(cmd_vel_2d, pose);
   }
 

@@ -135,7 +135,7 @@ RecoveryServer::on_activate(const rclcpp_lifecycle::State & /*state*/)
   }
 
   // create bond connection with nav2_util::LifeCycle manager
-  //Galactic createBond();
+  createBond();
 
   return nav2_util::CallbackReturn::SUCCESS;
 }
@@ -151,7 +151,7 @@ RecoveryServer::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
   }
 
   // destroy bond connection with nav2_util::LifeCycle manager
-  //Galactic destroyBond();
+  destroyBond();
 
   return nav2_util::CallbackReturn::SUCCESS;
 }

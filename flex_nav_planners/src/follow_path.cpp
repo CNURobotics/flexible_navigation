@@ -141,7 +141,7 @@ namespace flex_nav {
     planner_->activate();
 
     // create bond connection with nav2_util::LifeCycle manager
-    //Galactic createBond();
+    createBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -157,7 +157,7 @@ namespace flex_nav {
     planner_->deactivate();
 
     // destroy bond connection with nav2_util::LifeCycle manager
-    //Galactic destroyBond();
+    destroyBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
