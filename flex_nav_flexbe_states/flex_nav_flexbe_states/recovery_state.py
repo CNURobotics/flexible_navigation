@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2017
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -39,7 +39,6 @@ import importlib
 import rosidl_runtime_py.set_message
 
 from flexbe_core import EventState, Logger
-from geometry_msgs.msg import TwistStamped
 
 from flexbe_core.proxy import ProxyActionClient
 

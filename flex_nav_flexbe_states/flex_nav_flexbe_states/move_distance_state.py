@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2017
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -42,7 +42,7 @@ from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
 from flexbe_core.proxy import ProxySubscriberCached
 
-from geometry_msgs.msg import TwistStamped, Point, PointStamped
+from geometry_msgs.msg import Twist, TwistStamped, Point, PointStamped
 from nav_msgs.msg import Odometry
 
 from flex_nav_common.action import *
@@ -59,14 +59,15 @@ class MoveDistanceState(EventState):
     <= failed                       The robot was not able to move in the desired amount of time
     '''
 
-    def __init__(self, target_time, distance, cmd_topic='/cmd_vel', odometry_topic='/odom'):
+    def __init__(self, target_time, distance, cmd_topic='/cmd_vel', odometry_topic='/odom',
+                 cmd_topic_stamped=''):
         super(MoveDistanceState, self).__init__(outcomes = ['done', 'failed'])
         self._target_time           = target_time
         self._distance              = distance
         self._velocity              = (distance / target_time)
-        self._twist                 = TwistStamped()
-        self._twist.twist.linear.x  = self._velocity
-        self._twist.twist.angular.z = 0.0
+        self._twist                 = Twist()
+        self._twist.linear.x  = self._velocity
+        self._twist.angular.z = 0.0
 
         # The constructor is called when building the state machine, not when actually starting the behavior.
         # Thus, we cannot save the starting time now and will do so later.
@@ -77,13 +78,36 @@ class MoveDistanceState(EventState):
         ProxyPublisher._initialize(MoveDistanceState._node)
         ProxySubscriberCached._initialize(MoveDistanceState._node)
 
-        self._cmd_topic    = cmd_topic
-        self._pub          = ProxyPublisher(       {self._cmd_topic: TwistStamped})
-
         self._odom_topic   = odometry_topic
         self._odom_sub     = ProxySubscriberCached({self._odom_topic:  Odometry})
 
         self._starting_odom = None
+
+        if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
+            self._cmd_topic = cmd_topic
+            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+        else:
+            self._cmd_topic = None
+            self._pub = None
+
+
+        if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
+            self._twist_stamped  = TwistStamped()
+            self._twist_stamped.twist = self._twist
+            self._cmd_topic_stamped = cmd_topic_stamped
+            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+        else:
+            self._twist_stamped  = None
+            self._cmd_topic_stamped = None
+            self._pub_stamped  = None
+
+        if self._pub is None and self._pub_stamped is None:
+            Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
+        if self._cmd_topic == self._cmd_topic_stamped:
+            Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
+
+        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
 
 
     def execute(self, userdata):

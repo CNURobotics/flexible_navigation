@@ -1,6 +1,14 @@
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Changelog for package flexible_navigation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+0.3.1
+Fix state tests
+Add get_path_by_name state and server
+Add set_pose_state
+Modify states and nodes to publish cmd_vel as Twist and cmd_vel_stamped as TwistStamped
+  * May choose either or both, but defaults to Twist
+Tested under ROS 2 Foxy
+---------------------
 0.3.0 Update for conversion to ROS2 Foxy
 Currently, able to execute all flex_nav_controllers and flex_nav_planners nodes.
 However, there are issues with Pure Pursuit due to TF2 issue #110. This issue prevents the

@@ -2,14 +2,19 @@ cmake_minimum_required(VERSION 3.5)
 project(flex_nav_planners)
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+
+find_package(rclpy REQUIRED)
+
 find_package(flex_nav_common REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav2_core REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(nav2_navfn_planner REQUIRED)
 find_package(nav2_util REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rclcpp_action REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -18,6 +23,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 set(dependencies
   rclcpp
   rclcpp_action
+  rclpy
   flex_nav_common
   std_msgs
   nav2_core
@@ -57,6 +63,9 @@ add_executable(${PROJECT_NAME}_get_path_node
 ament_target_dependencies(${PROJECT_NAME}_get_path_node
 	${dependencies})
 
+# Install Python modules
+ament_python_install_package(${PROJECT_NAME})
+
 install(
 	TARGETS
 		${PROJECT_NAME}_follow_path_node
@@ -70,5 +79,14 @@ install(DIRECTORY include/${PROJECT_NAME}/
 	DESTINATION include//${PROJECT_NAME}
 	FILES_MATCHING PATTERN "*.h"
 )
+install(DIRECTORY paths/
+	DESTINATION paths/
+	FILES_MATCHING PATTERN "*.yaml"
+)
 
+# Install Python executables
+install(PROGRAMS
+  scripts/paths_by_name
+  DESTINATION lib/${PROJECT_NAME}
+)
 ament_package()

@@ -1,0 +1,12 @@
+path: flex_nav_flexbe_states.set_pose_state
+class: SetPoseState
+
+import_only: false
+
+params:
+    position:    [2.0, 1.0]
+    angle:       0.25
+    frame_id:    '/turtlebot/odom'
+
+outcome:
+    done

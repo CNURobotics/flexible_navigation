@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -51,7 +51,7 @@ from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
 from flexbe_core.proxy import ProxySubscriberCached
 
-from geometry_msgs.msg import TwistStamped, Point, PointStamped, Vector3
+from geometry_msgs.msg import Twist, TwistStamped, Point, PointStamped, Vector3
 from nav_msgs.msg import Odometry
 from visualization_msgs.msg import Marker
 
@@ -73,20 +73,21 @@ class PurePursuitState(EventState):
        -- recover_mode         bool      Recover path (typically on startup) (default: False)
        -- center_x:            float     Center point x-coordinate for circle defining arc motion (default: 0.0)
        -- center_y:            float     Center point y-coordinate for circle defining arc motion (default: 0.0)
-       -- cmd_topic            string    topic name of the robot command (default: '/create_node/cmd_vel')
-       -- odometry_topic:      string    topic of the iRobot Create sensor state (default:   '/create_node/odom'
-       -- marker_topic:        string    topic of the RViz marker used for visualization (default: '/pure_pursuit_marker')
+       -- cmd_topic            string    topic name of the robot command (default: 'cmd_vel')
+       -- odometry_topic:      string    topic of the iRobot Create sensor state (default:   'odom'
+       -- marker_topic:        string    topic of the RViz marker used for visualization (default: 'pure_pursuit_marker')
        -- marker_size:         float     Size of RViz marker used for target (default: 0.05)
+       -- cmd_topic_stamped    string    optional topic name of the stamped robot command (default: '')
 
-       ># indice                int	 The index
-       ># path			Path	 The path
+       ># indice                int      The index
+       ># path                  Path     The path
 
-       #> indice		int	 The index + 1
-       #> plan			Path	 The path
+       #> indice                int      The index + 1
+       #> plan                  Path     The path
 
-       <= done                 Reached the end of target relevance
-       <= continue		Continue following the path
-       <= failed               A bumper was activated prior to completion
+       <= done          Reached the end of target relevance
+       <= continue      Continue following the path
+       <= failed        A bumper was activated prior to completion
     """
 
     def __init__(self,  desired_velocity=0.2, max_rotation_rate=10.0,
@@ -94,7 +95,8 @@ class PurePursuitState(EventState):
                         lookahead_distance=0.25, timeout=0.08, recover_mode=False,
                         center_x=0.0, center_y=0.0,
                         cmd_topic='cmd_vel', odometry_topic='odom',
-                        marker_topic='pure_pursuit_marker', marker_size=0.05):
+                        marker_topic='pure_pursuit_marker', marker_size=0.05,
+                        cmd_topic_stamped=''):
         # Declare outcomes, input_keys, and output_keys by calling the super constructor with the corresponding arguments.
         super(PurePursuitState, self).__init__(outcomes = ['done', 'continue', 'failed'],
                                                      input_keys = ['indice', 'plan'],
@@ -104,13 +106,8 @@ class PurePursuitState(EventState):
         ProxySubscriberCached._initialize(PurePursuitState._node)
 
         # Store state parameter for later use.
-        self._twist                 = TwistStamped()
-        self._twist.twist.linear.x  = desired_velocity
-        self._twist.twist.angular.z = 0.0
-
         self._desired_velocity      = desired_velocity
         self._max_rotation_rate     = max_rotation_rate     # Used to clamp the rotation calculations
-
 
         self._current_position = PointStamped()
         self._current_position.header.stamp = self._node.get_clock().now().to_msg()
@@ -150,13 +147,41 @@ class PurePursuitState(EventState):
 
         self._odom_topic   = odometry_topic
         self._marker_topic = marker_topic
-        self._cmd_topic    = cmd_topic
 
         self._tf_buffer    = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, PurePursuitState._node)
 
-        self._odom_sub     = ProxySubscriberCached({self._odom_topic:  Odometry})
-        self._pub          = ProxyPublisher(       {self._cmd_topic: TwistStamped})
+        self._odom_sub = ProxySubscriberCached({self._odom_topic:  Odometry})
+        self._twist = Twist()
+        self._twist.linear.x  = desired_velocity
+        self._twist.angular.z = 0.0
+
+        if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
+            self._cmd_topic = cmd_topic
+            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+        else:
+            self._twist = None
+            self._cmd_topic = None
+            self._pub = None
+
+        if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
+            self._twist_stamped  = TwistStamped()
+            self._twist_stamped.twist = self._twist
+            self._cmd_topic_stamped = cmd_topic_stamped
+            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+        else:
+            self._twist_stamped  = None
+            self._cmd_topic_stamped = None
+            self._pub_stamped  = None
+
+        if self._pub is None and self._pub_stamped is None:
+            Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
+        if self._cmd_topic == self._cmd_topic_stamped:
+            Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
+
+        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
+
 
         if (self._marker_topic != ""):
             self._marker_pub   = ProxyPublisher({self._marker_topic: Marker})
@@ -360,9 +385,14 @@ class PurePursuitState(EventState):
         if (self._return):
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
-            ts = TwistStamped()
-            ts.header.stamp = self._node.get_clock().now().to_msg()
-            self._pub.publish(self._cmd_topic, ts.twist)
+            if self._pub:
+                self._pub.publish(self._cmd_topic, Twist())
+
+            if self._pub_stamped:
+                ts = TwistStamped() # Zero twist to stop if blocked
+                ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub_stamped.publish(self._cmd_topic_stamped, ts)
+
             return self._return
 
         # Get the latest odometry data
@@ -427,8 +457,13 @@ class PurePursuitState(EventState):
             self._twist.twist.angular.z = math.copysign(self._max_rotation_rate, self._twist.twist.angular.z)
 
         # Normal operation - publish the latest calculated twist
-        self._twist.header.stamp = self._node.get_clock().now().to_msg()
-        self._pub.publish(self._cmd_topic, self._twist.twist)
+        if self._pub:
+            self._pub.publish(self._cmd_topic, self._twist)
+
+        if self._pub_stamped:
+            self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+            self._twist_stamped.twist = self._twist
+            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
 
         if (self._marker_pub):
             self._marker_pub.publish(self._marker_topic,self._reference_marker)

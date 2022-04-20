@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -46,16 +46,17 @@ from geometry_msgs.msg import Twist
 
 class TimedTwistState(EventState):
     '''
-    This state publishes an open loop constant TwistStamped command based on parameters.
+    This state publishes an open loop constant Twist and/or TwistStamped command based on parameters.
 
-    -- target_time     float     Time which needs to have passed since the behavior started.
-    -- velocity        float     Body velocity (m/s)
-    -- rotation_rate   float     Angular rotation (radians/s)
-    -- cmd_topic       string    topic name of the robot velocity command (default: 'cmd_vel')
+    -- target_time          float     Time which needs to have passed since the behavior started.
+    -- velocity             float     Body velocity (m/s)
+    -- rotation_rate        float     Angular rotation (radians/s)
+    -- cmd_topic            string    topic name of the robot velocity command (default: 'cmd_vel')
+    -- cmd_topic_stamped    string    optional topic name of the robot stamped velocity command (default: '')
     <= done                 Given time has passed.
     '''
 
-    def __init__(self, target_time, velocity, rotation_rate, cmd_topic='cmd_vel'):
+    def __init__(self, target_time, velocity, rotation_rate, cmd_topic='cmd_vel', cmd_topic_stamped=''):
         # Declare outcomes, input_keys, and output_keys by calling the super constructor with the corresponding arguments.
         super(TimedTwistState, self).__init__(outcomes = ['done'])
 
@@ -63,9 +64,6 @@ class TimedTwistState(EventState):
 
         # Store state parameter for later use.
         self._target_time           = Duration(seconds=target_time)
-        self._twist                 = TwistStamped()
-        self._twist.twist.linear.x  = velocity
-        self._twist.twist.angular.z = rotation_rate
 
         # The constructor is called when building the state machine, not when actually starting the behavior.
         # Thus, we cannot save the starting time now and will do so later.
@@ -73,8 +71,35 @@ class TimedTwistState(EventState):
 
         self._done       = None # Track the outcome so we can detect if transition is blocked
 
-        self._cmd_topic    = cmd_topic
-        self._pub          = ProxyPublisher({self._cmd_topic: Twist})
+        self._twist = Twist()
+        self._twist.linear.x  = velocity
+        self._twist.angular.z = rotation_rate
+        if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
+            self._cmd_topic = cmd_topic
+            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+        else:
+            self._cmd_topic = None
+            self._pub = None
+
+
+        if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
+            self._twist_stamped  = TwistStamped()
+            self._twist_stamped.twist = self._twist
+            self._cmd_topic_stamped = cmd_topic_stamped
+            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+        else:
+            self._twist_stamped  = None
+            self._cmd_topic_stamped = None
+            self._pub_stamped  = None
+
+        if self._pub is None and self._pub_stamped is None:
+            Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
+        if self._cmd_topic == self._cmd_topic_stamped:
+            Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
+
+        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
+
 
     def execute(self, userdata):
         # This method is called periodically while the state is active.
@@ -83,10 +108,14 @@ class TimedTwistState(EventState):
         if (self._done):
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
-            ts = TwistStamped() # Zero twist to stop if blocked
-            ts.header.stamp = self._node.get_clock().now().to_msg()
+            if self._pub:
+                self._pub.publish(self._cmd_topic, Twist())
 
-            self._pub.publish(self._cmd_topic, ts)
+            if self._pub_stamped:
+                ts = TwistStamped() # Zero twist to stop if blocked
+                ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub_stamped.publish(self._cmd_topic_stamped, ts)
+
             return self._done
 
         if self._node.get_clock().now().nanoseconds - self._start_time.nanoseconds > self._target_time.nanoseconds:
@@ -95,8 +124,12 @@ class TimedTwistState(EventState):
             return 'done'
 
         # Normal operation
-        self._twist.header.stamp = self._node.get_clock().now().to_msg()  # update the timestamp
-        self._pub.publish(self._cmd_topic, self._twist)
+        if self._pub:
+            self._pub.publish(self._cmd_topic, self._twist)
+
+        if self._pub_stamped:
+            self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
         return None
 
     def on_enter(self, userdata):
