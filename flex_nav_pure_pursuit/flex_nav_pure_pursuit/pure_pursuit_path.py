@@ -1,5 +1,5 @@
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -49,9 +49,9 @@ class PurePursuitPath(PurePursuit):
     Pure Pursuit Path follower
     """
 
-    def __init__(self, node):
-        super(PurePursuitPath, self).__init__(node)
-        self._action_server = ActionServer(self.node, FollowPath, self._action_name, self.execute)
+    def __init__(self):
+        super(PurePursuitPath, self).__init__("pure_pursuit_path")
+        self._action_server = ActionServer(self, FollowPath, self._action_name, self.execute)
         # rclpy.spin(self)
 
     def execute(self, goal_handle):
@@ -70,40 +70,42 @@ class PurePursuitPath(PurePursuit):
         self._is_new_goal = True
 
         while self._running and not rclpy.ok():
-            self.node.get_logger().warn(0.25, '{} Waiting for lock'.format(self.get_name()))
+            self.get_logger().warn(0.25, '{} Waiting for lock'.format(self.get_name()))
 
         self._is_new_goal = False
 
         if not self._last_odom_msg:
-            self.node.get_logger().error('{} No odometry message received'.format(self.get_name()))
+            self.get_logger().error('{} No odometry message received'.format(self.get_name()))
             self.set_aborted(goal, result)
             self._running = False
             return
 
-        self._marker.action = Marker.ADD
-        self._marker.color.a = 1.0
-        self._marker.color.r = 0.0
-        self._marker.color.g = 0.0
-        self._marker.color.b = 1.0
-        self._marker_pub.publish(self._marker)
+        if self._marker_pub:
+            self._marker.action = Marker.ADD
+            self._marker.color.a = 1.0
+            self._marker.color.r = 0.0
+            self._marker.color.g = 0.0
+            self._marker.color.b = 1.0
+            self._marker_pub.publish(self._marker)
 
         self._start_time = self.get_clock().now()
         self._done = False
         self._failed = False
 
-        self._marker.action = Marker.MODIFY
-        self._marker.color.a = 1.0
-        self._marker.color.r = 0.0
-        self._marker.color.g = 1.0
-        self._marker.color.b = 0.0
-        self._marker_pub.publish(self._marker)
+        if self._marker_pub:
+            self._marker.action = Marker.MODIFY
+            self._marker.color.a = 1.0
+            self._marker.color.r = 0.0
+            self._marker.color.g = 1.0
+            self._marker.color.b = 0.0
+            self._marker_pub.publish(self._marker)
 
         self._indice = 1
         if self._indice < len(goal.goal_info.path.poses):
             self._target.point = goal.goal_info.path.poses[self._indice].pose.position
             self._prior.point = goal.goal_info.path.poses[self._indice - 1].pose.position
         else:
-            self.node.get_logger().error(
+            self.get_logger().error(
                 '%s Invalid index %d - cannot access the path points!'
                 % (self.get_name(), self._indice)
             )
@@ -139,13 +141,13 @@ class PurePursuitPath(PurePursuit):
                 dr = np.sqrt((self._target.point.x - self._location.point.x)**2 + (self._target.point.y - self._location.point.y)**2 )
                 if dr >= self._lookahead_distance.value:
                     # Success!
-                    self.node.get_logger().debug('{} Found terminal point - success!'.format(self.get_name()))
+                    self.get_logger().debug('{} Found terminal point - success!'.format(self.get_name()))
                     self.set_succeeded(goal, result)
                     self._running = False
                     return # Done
                 else:
                     # Failure
-                    self.node.get_logger().info('{} Failed to find point along current path - failed!'.format(self.get_name()))
+                    self.get_logger().info('{} Failed to find point along current path - failed!'.format(self.get_name()))
                     self.set_aborted(goal, result)
                     self._running = False
                     return # Failed to find target
@@ -158,12 +160,12 @@ class PurePursuitPath(PurePursuit):
 
             if lookahead is None:
                 if self._failed:
-                    self.node.get_logger().error('{} No lookahead - assume failed!'.format(selfget._name()))
+                    self.get_logger().error('{} No lookahead - assume failed!'.format(selfget._name()))
                     self.set_aborted(goal, result)
                     self._running = False
                     return # Failed to find target
                 elif self._done:
-                    self.node.get_logger().errpr('{} No lookahead - assume done!'.format(self.get_name()))
+                    self.get_logger().errpr('{} No lookahead - assume done!'.format(self.get_name()))
                     return self.set_succeeded(goal, result)
                     self._running = False
                     return # Done
@@ -172,10 +174,15 @@ class PurePursuitPath(PurePursuit):
                 self._twist.twist.linear.x = self._desired_velocity.value * self._max_rotation_rate.value / math.fabs(self._twist.twist.angular.z)
                 self._twist.twist.angular.z = math.copysign(self._max_rotation_rate.value, self._twist.twist.angular.z)
 
-            # self._twist.header.stamp = rospy.Time.now()
-            self._twist.header.stamp = rclpy.Time.now()
-            self._cmd_pub.publish(self._twist)
-            self._marker_pub.publish(self._marker)
+            if self._cmd_pub:
+                self._cmd_pub.publish(self._cmd_topic, self._twist)
+
+            if self._cmd_pub_stamped:
+                self._twist_stamped.header.stamp = rospy.Time.now()
+                self._cmd_pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+
+            if self._marker_pub:
+                self._marker_pub.publish(self._marker)
 
             r.sleep()
 

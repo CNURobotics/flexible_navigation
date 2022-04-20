@@ -1,5 +1,5 @@
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -47,9 +47,9 @@ class PurePursuitTopic(PurePursuit):
     Pure Pursuit topic listener
     """
 
-    def __init__(self, node):
-        super(PurePursuitTopic, self).__init__(node)
-        self._action_server = ActionServer(self.node, FollowTopic, self._action_name, self.execute)
+    def __init__(self):
+        super(PurePursuitTopic, self).__init__("pure_pursuit_topic")
+        self._action_server = ActionServer(self, FollowTopic, self._action_name, self.execute)
         self._current_path = None
         self._latest_path = None
 
@@ -68,13 +68,13 @@ class PurePursuitTopic(PurePursuit):
 
         r = rclpy.Rate(self._controller_rate.value)
         result = FollowTopic.Result()
-        self.node.get_logger().info('%s Attempting to listen to topic: %s' % (self._name, goal.topic.data))
+        self.get_logger().info('%s Attempting to listen to topic: %s' % (self._name, goal.topic.data))
 
         try:
             self._sub = rclpy.create_subscription(Path, goal.topic.data, self.topic_cb, 10)
-            self.node.get_logger().info('{} Success!'.format(self._name))
+            self.get_logger().info('{} Success!'.format(self._name))
         except:
-            self.node.get_logger().error('{} Desired topic does not publish a nav_msgs/Path'.format(self._name))
+            self.get_logger().error('{} Desired topic does not publish a nav_msgs/Path'.format(self._name))
             self.set_aborted(goal, result)
             return
 
@@ -91,18 +91,19 @@ class PurePursuitTopic(PurePursuit):
             self._failed = False
 
             self._current_path = self._latest_path
-            self.node.get_logger().debug('%s Executing path with %d points: %d' % (self._name, len(self._current_path.poses), self._current_path.header.seq))
+            self.get_logger().debug('%s Executing path with %d points: %d' % (self._name, len(self._current_path.poses), self._current_path.header.seq))
 
             if not self._last_odom_msg:
-                self.node.get_logger().error('{} No odometry message received'.format(self._name))
+                self.get_logger().error('{} No odometry message received'.format(self._name))
                 return self.set_aborted(goal, result)
 
-            self._marker.action = Marker.MODIFY
-            self._marker.color.a = 1.0
-            self._marker.color.r = 0.0
-            self._marker.color.g = 1.0
-            self._marker.color.b = 0.0
-            self._marker_pub.publish(self._marker)
+            if self._marker_pub:
+                self._marker.action = Marker.MODIFY
+                self._marker.color.a = 1.0
+                self._marker.color.r = 0.0
+                self._marker.color.g = 1.0
+                self._marker.color.b = 0.0
+                self._marker_pub.publish(self._marker)
 
             self._indice = 1
             if self._indice < len(self._current_path.poses):
@@ -114,7 +115,7 @@ class PurePursuitTopic(PurePursuit):
                 except:
                     break
             else:
-                self.node.get_logger().error('%s Invalid index %d - cannot access the path points!' % (self._name, self._indice))
+                self.get_logger().error('%s Invalid index %d - cannot access the path points!' % (self._name, self._indice))
                 return self.set_aborted(goal, result)
 
             while self._current_path.header.stamp == self._latest_path.header.stamp and self._running and rclpy.ok() and not self._is_new_goal and not self._server.is_cancel_requested():
@@ -132,10 +133,10 @@ class PurePursuitTopic(PurePursuit):
 
                     dr = np.sqrt((final_target.pose.position.x - self._location.point.x)**2 + (final_target.pose.position.y - self._location.point.y)**2 )
                     if dr <= self._lookahead_distance.value:
-                        self.node.get_logger().debug('{} Found terminal point - success!'.format(self._name))
+                        self.get_logger().debug('{} Found terminal point - success!'.format(self._name))
                         return self.set_succeeded(goal, result)
                     else:
-                        self.node.get_logger().error('{} Failed to find point along current path - failed!'.format(self._name))
+                        self.get_logger().error('{} Failed to find point along current path - failed!'.format(self._name))
                         self.set_aborted(goal, result)
                         break
 
@@ -148,13 +149,13 @@ class PurePursuitTopic(PurePursuit):
 
                     if lookahead is None:
                         if self._failed:
-                            self.node.get_logger().error('{} No lookahead - assume failed!'.format(self._name))
+                            self.get_logger().error('{} No lookahead - assume failed!'.format(self._name))
                             return self.set_aborted(goal, result)
                         elif self._done:
-                            self.node.get_logger().error('{} No lookahead - assume done!'.format(self._name))
+                            self.get_logger().error('{} No lookahead - assume done!'.format(self._name))
                             return self.set_succeeded(goal, result)
                 except Exception as e:
-                    self.node.get_logger().error('%s Invalid point data: %s' % (self._name, str(e)))
+                    self.get_logger().error('%s Invalid point data: %s' % (self._name, str(e)))
                     self._running = False
                     return self.set_aborted(goal, result)
 
@@ -162,9 +163,15 @@ class PurePursuitTopic(PurePursuit):
                     self._twist.twist.linear.x = self._desired_velocity.value * self._max_rotation_rate.value / math.fabs(self._twist.twist.angular.z)
                     self._twist.twist.angular.z = math.copysign(self._max_rotation_rate.value, self._twist.twist.angular.z)
 
-                self._twist.header.stamp = rospy.Time.now()
-                self._cmd_pub.publish(self._twist)
-                self._marker_pub.publish(self._marker)
+                if self._cmd_pub:
+                    self._cmd_pub.publish(self._cmd_topic, self._twist)
+
+                if self._cmd_pub_stamped:
+                    self._twist_stamped.header.stamp = rospy.Time.now()
+                    self._cmd_pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+
+                if self._marker_pub:
+                    self._marker_pub.publish(self._marker)
 
                 r.sleep()
 
@@ -180,7 +187,7 @@ class PurePursuitTopic(PurePursuit):
             data (Path): The Path message to process
         """
 
-        rospy.logdebug('%s  Recieved a new path with %d points: %d' % (self._name, len(data.poses), data.header.seq))
+        rospy.logdebug('%s  Received a new path with %d points: %d' % (self._name, len(data.poses), data.header.seq))
         self._latest_path = data
 
     def set_succeeded(self, goal, result):

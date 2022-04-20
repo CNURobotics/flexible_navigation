@@ -1,0 +1,6 @@
+path: flex_nav_flexbe_states.get_path_by_name_state
+class: GetPathByNameState
+
+import_only: true
+
+outcome: planned

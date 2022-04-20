@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
 	<name>flex_nav_flexbe_states</name>
-	<version>0.3.0</version>
+	<version>0.3.1</version>
 	<description>
 		 flex_nav_flexbe_states provides a collection of FlexBE states used for robot navigation
 	</description>

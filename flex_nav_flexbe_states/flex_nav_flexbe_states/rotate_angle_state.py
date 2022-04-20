@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2017
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -44,7 +44,7 @@ from rclpy.duration import Duration
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
 
-from geometry_msgs.msg import TwistStamped, Point, PointStamped
+from geometry_msgs.msg import Twist, TwistStamped, Point, PointStamped
 from nav_msgs.msg import Odometry
 
 from flex_nav_common.action import *
@@ -52,36 +52,66 @@ from flex_nav_common.action import *
 class RotateAngleState(EventState):
     '''
     Rotates the robot through given angle in degrees in the given time defined by userdata
-    -- target_time      float       Time which needs to have passed since the behavior started
-    -- target_angle      float      Angle we want to rotate
-    -- odometry_topic   string      topic of the iRobot Create sensor state (default:   '/create_node/odom')
-    -- cmd_topic        string      Topic name of the robot command (default: '/create_node/cmd_vel')
-    <= done                         Given time has passed.
+    -- target_time       float     Time which needs to have passed since the behavior started
+    -- target_angle      float     Angle we want to rotate (degrees)
+    -- odometry_topic    string    Odometry topic (default:   'odom')
+    -- cmd_topic         string    Topic name of the robot command (default: '/create_node/cmd_vel')
+    -- cmd_topic_stamped string    Optional topic name of the robot stamped velocity command (default: '')
+    <= done                        Given time has passed.
     '''
-    def __init__(self, target_time, target_angle=360.0, cmd_topic='/create_node/cmd_vel', odometry_topic='/create_node/odom'):
+    def __init__(self, target_time, target_angle=360.0, cmd_topic='cmd_vel', odometry_topic='odom', cmd_topic_stamped=''):
         super(RotateAngleState, self).__init__(outcomes = ['done'])
 
         ProxyPublisher._initialize(RotateAngleState._node)
 
         self._target_time           = Duration(seconds=target_time)
         self._target_angle          = target_angle*3.141593/180.0
-        self._twist                 = TwistStamped()
-        self._twist.twist.linear.x  = 0.0
-        self._twist.twist.angular.z = (self._target_angle / target_time)
+        self._twist                 = Twist()
+        self._twist.linear.x  = 0.0
+        self._twist.angular.z = (self._target_angle / target_time)
 
-        self._cmd_topic    = cmd_topic
-        self._pub          = ProxyPublisher({self._cmd_topic: TwistStamped})
         self._start_time   = None
         self._return       = None # Track the outcome so we can detect if transition is blocked
+
+        if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
+            self._cmd_topic = cmd_topic
+            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+        else:
+            self._cmd_topic = None
+            self._pub = None
+
+        if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
+            self._twist_stamped  = TwistStamped()
+            self._twist_stamped.twist = self._twist
+            self._cmd_topic_stamped = cmd_topic_stamped
+            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+        else:
+            self._twist_stamped  = None
+            self._cmd_topic_stamped = None
+            self._pub_stamped  = None
+
+        if self._pub is None and self._pub_stamped is None:
+            Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
+        if self._cmd_topic == self._cmd_topic_stamped:
+            Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
+
+        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
+
 
     def execute(self, userdata):
 
         if (self._return):
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
-            ts = TwistStamped()
-            ts.header.stamp = self._node.get_clock().now().to_msg()
-            self._pub.publish(self._cmd_topic, ts)
+            if self._pub:
+                self._pub.publish(self._cmd_topic, Twist())
+
+            if self._pub_stamped:
+                ts = TwistStamped() # Zero twist to stop if blocked
+                ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub_stamped.publish(self._cmd_topic_stamped, ts)
+
             return self._return
 
         #@TODO - modify to track actual angle instead of target time
@@ -93,8 +123,13 @@ class RotateAngleState(EventState):
             return 'done'
 
         # Normal execution
-        self._twist.header.stamp = self._node.get_clock().now().to_msg()
-        self._pub.publish(self._cmd_topic, self._twist)
+        if self._pub:
+            self._pub.publish(self._cmd_topic, self._twist)
+
+        if self._pub_stamped:
+            self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+
         return None
 
     def on_enter(self, userdata):

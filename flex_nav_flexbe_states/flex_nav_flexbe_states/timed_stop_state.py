@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -48,17 +48,19 @@ from nav_msgs.msg import Odometry
 
 class TimedStopState(EventState):
     '''
-    This state publishes a constant zero TwistStamped command based on parameters.  The state monitors the
-    robot odometry message and returns a failed outcome if speed is not near zero within the timeout
+    This state publishes a constant zero Twist and/or TwistStamped command based on parameters.
+    The state monitors the robot odometry message and returns a failed outcome
+    if speed is not near zero within the timeout
 
-    -- timeout         float     Time which needs to have passed since the behavior started. (default: 0.25)
-    -- odom_topic      string    topic of the robot odometry message (default: 'odom')
-    -- cmd_topic       string    topic name of the robot velocity command (default: 'cmd_vel')
+    -- timeout              float     Time which needs to have passed since the behavior started. (default: 0.25)
+    -- cmd_topic            string    topic name of the robot velocity command (default: 'cmd_vel')
+    -- odom_topic           string    topic of the robot odometry message (default: 'odom')
+    -- cmd_topic_stamped    string    optional topic name of the robot stamped velocity command (default: '')
     <= done         Robot stopped within the specified time.
     <= failed       The robot is still moving according to the odometry message after timeout.
     '''
 
-    def __init__(self, timeout=0.25, cmd_topic='cmd_vel', odom_topic='odom'):
+    def __init__(self, timeout=0.25, cmd_topic='cmd_vel', odom_topic='odom', cmd_topic_stamped=""):
         # Declare outcomes, input_keys, and output_keys by calling the super constructor with the corresponding arguments.
         super(TimedStopState, self).__init__(outcomes = ['done', 'failed'])
 
@@ -66,30 +68,58 @@ class TimedStopState(EventState):
         ProxySubscriberCached._initialize(TimedStopState._node)
 
         # Store state parameter for later use.
-        self._timeout           = Duration(seconds=timeout)
-        self._twist             = TwistStamped()
-
+        self._timeout = Duration(seconds=timeout)
 
         # The constructor is called when building the state machine, not when actually starting the behavior.
         # Thus, we cannot save the starting time now and will do so later.
         self._start_time = None
 
-        self._done       = None # Track the outcome so we can detect if transition is blocked
+        self._done = None # Track the outcome so we can detect if transition is blocked
 
-        self._odom_topic   = odom_topic
-        self._cmd_topic    = cmd_topic
-        self._odom_sub     = ProxySubscriberCached({self._odom_topic: Odometry})
-        self._pub          = ProxyPublisher({self._cmd_topic: Twist})
+        self._odom_topic = odom_topic
+        self._odom_sub = ProxySubscriberCached({self._odom_topic: Odometry})
+
+        if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
+            self._twist = Twist() # defaults to zero
+            self._cmd_topic = cmd_topic
+            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+        else:
+            self._twist = None
+            self._cmd_topic = None
+            self._pub = None
+
+
+        if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
+            self._twist_stamped  = TwistStamped()
+            self._cmd_topic_stamped = cmd_topic_stamped
+            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+        else:
+            self._twist_stamped  = None
+            self._cmd_topic_stamped = None
+            self._pub_stamped  = None
+
+        if self._pub is None and self._pub_stamped is None:
+            Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
+        if self._cmd_topic == self._cmd_topic_stamped:
+            Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
+
+        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
 
     def execute(self, userdata):
         # This method is called periodically while the state is active.
         # If no outcome is returned, the state will stay active.
         if (self._done):
             # We have completed the state, and therefore must be blocked by autonomy level
-            # Stop the robot, but and return the prior outcome
-            ts = TwistStamped() # Zero twist to stop if blocked
-            ts.header.stamp = self._node.get_clock().now().to_msg()
-            self._pub.publish(self._cmd_topic, ts)
+            # publish commands and return the prior outcome
+
+            if self._pub:
+                self._pub.publish(self._cmd_topic, self._twist)
+
+            if self._pub_stamped:
+                self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+
             return self._done
 
 
@@ -114,14 +144,23 @@ class TimedStopState(EventState):
 
 
         # Normal operation publish the zero twist
-        self._twist.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-        self._pub.publish(self._cmd_topic, self._twist)
+        if self._pub:
+            self._pub.publish(self._cmd_topic, self._twist)
+
+        if self._pub_stamped:
+            self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+
         return None
 
     def on_enter(self, userdata):
         # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
-        self._twist.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-        self._pub.publish(self._cmd_topic, self._twist)
+        if self._pub:
+            self._pub.publish(self._cmd_topic, self._twist)
+
+        if self._pub_stamped:
+            self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
 
         self._start_time = self._node.get_clock().now()
         self._done       = None # reset the completion flag

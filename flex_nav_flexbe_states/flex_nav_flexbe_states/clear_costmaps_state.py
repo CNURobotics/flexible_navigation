@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2017
+#  Copyright (c) 2016-2022
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -38,10 +38,7 @@
 import traceback
 
 from flexbe_core import EventState, Logger
-from geometry_msgs.msg import TwistStamped
-
 from flexbe_core.proxy import ProxyActionClient
-
 from flex_nav_common.action import *
 
 class ClearCostmapsState(EventState):
