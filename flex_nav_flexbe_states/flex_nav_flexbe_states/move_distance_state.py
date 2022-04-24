@@ -83,30 +83,29 @@ class MoveDistanceState(EventState):
 
         self._starting_odom = None
 
+        self._pub = ProxyPublisher()
         if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
             self._cmd_topic = cmd_topic
-            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+            self._pub.createPublisher( cmd_topic, Twist)
         else:
             self._cmd_topic = None
-            self._pub = None
 
 
         if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
             self._twist_stamped  = TwistStamped()
-            self._twist_stamped.twist = self._twist
+            self._twist_stamped.twist.linear.x  = self._velocity
             self._cmd_topic_stamped = cmd_topic_stamped
-            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+            self._pub.createPublisher( cmd_topic_stamped, TwistStamped)
         else:
             self._twist_stamped  = None
             self._cmd_topic_stamped = None
-            self._pub_stamped  = None
 
-        if self._pub is None and self._pub_stamped is None:
+        if self._cmd_topic is None and self._cmd_topic_stamped is None:
             Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
         if self._cmd_topic == self._cmd_topic_stamped:
             Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
 
-        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic or self._cmd_topic_stamped, "Must define at least one cmd publishing topic"
         assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
 
 
@@ -115,9 +114,14 @@ class MoveDistanceState(EventState):
         if (self._return):
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
-            ts = TwistStamped()
-            ts.header.stamp = self._node.get_clock().now().to_msg()
-            self._pub.publish(self._cmd_topic, ts)
+            if self._cmd_topic:
+                self._pub.publish(self._cmd_topic, Twist())
+
+            if self._cmd_topic_stamped:
+                ts = TwistStamped() # Zero twist to stop if blocked
+                ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub.publish(self._cmd_topic_stamped, ts)
+
             return self._return
 
 
@@ -157,17 +161,22 @@ class MoveDistanceState(EventState):
                 self._return = 'failed'
                 return 'failed'
 
-        if (elapsed_time  > 2.0*self._target_time ):
-            # If the time it takes to back up is significantly longer than the desired time
-            # constraints then will return the failure state
-            # Extending the target time to allow for message delays
-            Logger.logwarn(' long timeout before traveling desired distance ' )
-            self._return = 'failed'
-            return 'failed'
+        else:
+            # No odom topic, so go purely based on time as safety
+            # Allow some margin for message delays
+            if (self._node.get_clock().now() - self._start_time > 1.1*self._target_time):
+                Logger.logwarn(' long timeout before traveling desired distance ' )
+                self._return = 'failed'
+                return 'failed'
 
         # Normal operation
-        self._twist.header.stamp = self._node.get_clock().now().to_msg()
-        self._pub.publish(self._cmd_topic, self._twist)
+        if self._cmd_topic:
+            self._pub.publish(self._cmd_topic, self._twist)
+
+        if self._cmd_topic_stamped:
+            self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+            self._pub.publish(self._cmd_topic_stamped, self._twist_stamped)
+
         return None
 
     def on_enter(self, userdata):

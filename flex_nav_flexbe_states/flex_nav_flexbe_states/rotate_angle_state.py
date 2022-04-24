@@ -73,29 +73,30 @@ class RotateAngleState(EventState):
         self._start_time   = None
         self._return       = None # Track the outcome so we can detect if transition is blocked
 
+        self._pub = ProxyPublisher()
         if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
             self._cmd_topic = cmd_topic
-            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+            self._pub.createPublisher( cmd_topic, Twist)
         else:
             self._cmd_topic = None
-            self._pub = None
+
 
         if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
             self._twist_stamped  = TwistStamped()
-            self._twist_stamped.twist = self._twist
+            self._twist_stamped.twist.linear.x  = 0.0
+            self._twist_stamped.twist.angular.z = self._twist.angular.z
             self._cmd_topic_stamped = cmd_topic_stamped
-            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+            self._pub.createPublisher( cmd_topic_stamped, TwistStamped)
         else:
             self._twist_stamped  = None
             self._cmd_topic_stamped = None
-            self._pub_stamped  = None
 
-        if self._pub is None and self._pub_stamped is None:
+        if self._cmd_topic is None and self._cmd_topic_stamped is None:
             Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
         if self._cmd_topic == self._cmd_topic_stamped:
             Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
 
-        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic or self._cmd_topic_stamped, "Must define at least one cmd publishing topic"
         assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
 
 
@@ -104,10 +105,10 @@ class RotateAngleState(EventState):
         if (self._return):
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
-            if self._pub:
+            if self._cmd_topic:
                 self._pub.publish(self._cmd_topic, Twist())
 
-            if self._pub_stamped:
+            if self._cmd_topic_stamped:
                 ts = TwistStamped() # Zero twist to stop if blocked
                 ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
                 self._pub_stamped.publish(self._cmd_topic_stamped, ts)
@@ -118,15 +119,15 @@ class RotateAngleState(EventState):
 
         if (self._node.get_clock().now() - self._start_time > self._target_time):
             #The robot will twist in place until the desired time has elapsed
-            #Once it has the it will return done
+            #Once it has, the state will return done
             self._return = 'done'
             return 'done'
 
         # Normal execution
-        if self._pub:
+        if self._cmd_topic:
             self._pub.publish(self._cmd_topic, self._twist)
 
-        if self._pub_stamped:
+        if self._cmd_topic_stamped:
             self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
             self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
 
