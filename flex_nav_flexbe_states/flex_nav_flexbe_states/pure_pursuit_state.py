@@ -156,103 +156,103 @@ class PurePursuitState(EventState):
         self._twist.linear.x  = desired_velocity
         self._twist.angular.z = 0.0
 
+        self._pub = ProxyPublisher()
         if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
             self._cmd_topic = cmd_topic
-            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+            self._pub.createPublisher( cmd_topic, Twist)
         else:
-            self._twist = None
             self._cmd_topic = None
-            self._pub = None
+
 
         if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
             self._twist_stamped  = TwistStamped()
-            self._twist_stamped.twist = self._twist
+            self._twist_stamped.twist.linear.x  = desired_velocity
+            self._twist_stamped.twist.angular.z = 0.0
             self._cmd_topic_stamped = cmd_topic_stamped
-            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+            self._pub.createPublisher( cmd_topic_stamped, TwistStamped)
         else:
             self._twist_stamped  = None
             self._cmd_topic_stamped = None
-            self._pub_stamped  = None
 
-        if self._pub is None and self._pub_stamped is None:
+        if self._cmd_topic is None and self._cmd_topic_stamped is None:
             Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
         if self._cmd_topic == self._cmd_topic_stamped:
             Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
 
-        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic or self._cmd_topic_stamped, "Must define at least one cmd publishing topic"
         assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
 
 
         if (self._marker_topic != ""):
-            self._marker_pub   = ProxyPublisher({self._marker_topic: Marker})
+            self._pub.createPublisher(self._marker_topic, Marker)
+
+            self._marker       = Marker()
+            self._marker.header.frame_id = self._target_frame
+            self._marker.header.stamp = self._node.get_clock().now().to_msg()
+            self._marker.ns     = "pure_pursuit_waypoints"
+            self._marker.id     = int(target_x*1000000)+int(target_y*1000)
+            self._marker.type   = Marker.SPHERE
+            self._marker.action = Marker.ADD
+            self._marker.pose.position.x = target_x
+            self._marker.pose.position.y = target_y
+            self._marker.pose.position.z = 0.0
+            self._marker.pose.orientation.x = 0.0
+            self._marker.pose.orientation.y = 0.0
+            self._marker.pose.orientation.z = 0.0
+            self._marker.pose.orientation.w = 1.0
+            self._marker.scale.x = marker_size
+            self._marker.scale.y = marker_size
+            self._marker.scale.z = marker_size
+            self._marker.color.a = 1.0  # Don't forget to set the alpha!
+            self._marker.color.r = 0.0
+            self._marker.color.g = 0.0
+            self._marker.color.b = 1.0
+
+            self._reference_marker = Marker()
+            self._reference_marker.header.frame_id = self._target_frame
+            self._reference_marker.header.stamp = self._node.get_clock().now().to_msg()
+            self._reference_marker.ns = "pure_pursuit_reference"
+            self._reference_marker.id = 1
+            self._reference_marker.type   = Marker.SPHERE
+            self._reference_marker.action = Marker.ADD
+            self._reference_marker.pose.position.x = target_x
+            self._reference_marker.pose.position.y = target_y
+            self._reference_marker.pose.position.z = 0.0
+            self._reference_marker.pose.orientation.x = 0.0
+            self._reference_marker.pose.orientation.y = 0.0
+            self._reference_marker.pose.orientation.z = 0.0
+            self._reference_marker.pose.orientation.w = 1.0
+            self._reference_marker.scale.x = marker_size*0.75
+            self._reference_marker.scale.y = marker_size*0.75
+            self._reference_marker.scale.z = marker_size*0.75
+            self._reference_marker.color.a = 0.0  # Add, but make invisible at first
+            self._reference_marker.color.r = 1.0
+            self._reference_marker.color.g = 0.0
+            self._reference_marker.color.b = 1.0
+
+            self._local_target_marker = Marker()
+            self._local_target_marker.header.frame_id = self._target_frame
+            self._local_target_marker.header.stamp = self._node.get_clock().now().to_msg()
+            self._local_target_marker.ns = "pure_pursuit_target"
+            self._local_target_marker.id = 1
+            self._local_target_marker.type   = Marker.SPHERE
+            self._local_target_marker.action = Marker.ADD
+            self._local_target_marker.pose.position.x = target_x
+            self._local_target_marker.pose.position.y = target_y
+            self._local_target_marker.pose.position.z = 0.0
+            self._local_target_marker.pose.orientation.x = 0.0
+            self._local_target_marker.pose.orientation.y = 0.0
+            self._local_target_marker.pose.orientation.z = 0.0
+            self._local_target_marker.pose.orientation.w = 1.0
+            self._local_target_marker.scale.x = marker_size
+            self._local_target_marker.scale.y = marker_size
+            self._local_target_marker.scale.z = marker_size
+            self._local_target_marker.color.a = 0.0  # Add, but make invisible at first
+            self._local_target_marker.color.r = 1.0
+            self._local_target_marker.color.g = 0.0
+            self._local_target_marker.color.b = 1.0
         else:
-            self._marker_pub = None
-
-        self._marker       = Marker()
-        self._marker.header.frame_id = self._target_frame
-        self._marker.header.stamp = self._node.get_clock().now().to_msg()
-        self._marker.ns     = "pure_pursuit_waypoints"
-        self._marker.id     = int(target_x*1000000)+int(target_y*1000)
-        self._marker.type   = Marker.SPHERE
-        self._marker.action = Marker.ADD
-        self._marker.pose.position.x = target_x
-        self._marker.pose.position.y = target_y
-        self._marker.pose.position.z = 0.0
-        self._marker.pose.orientation.x = 0.0
-        self._marker.pose.orientation.y = 0.0
-        self._marker.pose.orientation.z = 0.0
-        self._marker.pose.orientation.w = 1.0
-        self._marker.scale.x = marker_size
-        self._marker.scale.y = marker_size
-        self._marker.scale.z = marker_size
-        self._marker.color.a = 1.0  # Don't forget to set the alpha!
-        self._marker.color.r = 0.0
-        self._marker.color.g = 0.0
-        self._marker.color.b = 1.0
-
-        self._reference_marker = Marker()
-        self._reference_marker.header.frame_id = self._target_frame
-        self._reference_marker.header.stamp = self._node.get_clock().now().to_msg()
-        self._reference_marker.ns = "pure_pursuit_reference"
-        self._reference_marker.id = 1
-        self._reference_marker.type   = Marker.SPHERE
-        self._reference_marker.action = Marker.ADD
-        self._reference_marker.pose.position.x = target_x
-        self._reference_marker.pose.position.y = target_y
-        self._reference_marker.pose.position.z = 0.0
-        self._reference_marker.pose.orientation.x = 0.0
-        self._reference_marker.pose.orientation.y = 0.0
-        self._reference_marker.pose.orientation.z = 0.0
-        self._reference_marker.pose.orientation.w = 1.0
-        self._reference_marker.scale.x = marker_size*0.75
-        self._reference_marker.scale.y = marker_size*0.75
-        self._reference_marker.scale.z = marker_size*0.75
-        self._reference_marker.color.a = 0.0  # Add, but make invisible at first
-        self._reference_marker.color.r = 1.0
-        self._reference_marker.color.g = 0.0
-        self._reference_marker.color.b = 1.0
-
-        self._local_target_marker = Marker()
-        self._local_target_marker.header.frame_id = self._target_frame
-        self._local_target_marker.header.stamp = self._node.get_clock().now().to_msg()
-        self._local_target_marker.ns = "pure_pursuit_target"
-        self._local_target_marker.id = 1
-        self._local_target_marker.type   = Marker.SPHERE
-        self._local_target_marker.action = Marker.ADD
-        self._local_target_marker.pose.position.x = target_x
-        self._local_target_marker.pose.position.y = target_y
-        self._local_target_marker.pose.position.z = 0.0
-        self._local_target_marker.pose.orientation.x = 0.0
-        self._local_target_marker.pose.orientation.y = 0.0
-        self._local_target_marker.pose.orientation.z = 0.0
-        self._local_target_marker.pose.orientation.w = 1.0
-        self._local_target_marker.scale.x = marker_size
-        self._local_target_marker.scale.y = marker_size
-        self._local_target_marker.scale.z = marker_size
-        self._local_target_marker.color.a = 0.0  # Add, but make invisible at first
-        self._local_target_marker.color.r = 1.0
-        self._local_target_marker.color.g = 0.0
-        self._local_target_marker.color.b = 1.0
+            self._marker = None
 
     # Transform point into odometry frame
     def transformOdom(self, point):
@@ -303,9 +303,9 @@ class PurePursuitState(EventState):
         self._return = None # Clear completion flag
 
         # Wait for odometry message
+        rate = PurePursuitState._node.create_rate(0.25)
         while (not self._odom_sub.has_msg(self._odom_topic)):
             Logger.logwarn('Waiting for odometry message from the robot ' )
-            rate = PurePursuitState._node.create_rate(0.25)
             rate.sleep()
 
         self._last_odom = self._sub.get_last_msg(self._odom_topic)
@@ -316,13 +316,11 @@ class PurePursuitState(EventState):
         # self._target.header.stamp = self._last_odom.header.stamp
         while (self.transformOdom(self._target) is None):
             Logger.logwarn('Waiting for tf2_ros transformations to odometry frame to become available from the robot ' )
-            rate = PurePursuitState._node.create_rate(0.25)
             rate.sleep()
             self._target.header.stamp = self._node.get_clock().now().to_msg()
 
         while (self.transformMap(self._last_odom) is None):
             Logger.logwarn('Waiting for tf2_ros transformations to map frame become available from the robot ' )
-            rate = PurePursuitState._node.create_rate(0.25)
             rate.sleep()
             self._last_odom = self._sub.get_last_msg(self._odom_topic)
 
@@ -332,16 +330,16 @@ class PurePursuitState(EventState):
         self._current_position = self.transformMap(point)
         Logger.loginfo("Starting point = " + str(self._current_position.x) + " " + str(self._current_position.y))
 
-        # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
-        if (self._marker_pub):
+        # This method is called when the state becomes active
+        if (self._marker):
             self._marker.action  = Marker.ADD
             self._marker.color.a = 1.0 # Set alpha otherwise the marker is invisible
             self._marker.color.r = 0.0
             self._marker.color.g = 0.0
             self._marker.color.b = 1.0 # Indicate this target is planned
-            self._marker_pub.publish(self._marker_topic,self._marker)
-            self._marker_pub.publish(self._marker_topic,self._reference_marker)
-            self._marker_pub.publish(self._marker_topic,self._local_target_marker)
+            self._pub.publish(self._marker_topic, self._marker)
+            self._pub.publish(self._marker_topic, self._reference_marker)
+            self._pub.publish(self._marker_topic, self._local_target_marker)
             self._marker.action           = Marker.MODIFY
             self._reference_marker.action = Marker.MODIFY
             self._reference_marker.color.a = 1.0 # Set alpha so it will become visible on next publish
@@ -354,13 +352,13 @@ class PurePursuitState(EventState):
         self._return     = None  # reset the completion flag
         self._failed     = False # reset the failed flag
 
-        if (self._marker_pub):
+        if (self._marker):
             self._marker.action  = Marker.MODIFY
             self._marker.color.a = 1.0
             self._marker.color.r = 0.0
             self._marker.color.g = 1.0 # Indicate this target is active
             self._marker.color.b = 0.0
-            self. _marker_pub.publish(self._marker_topic,self._marker)
+            self._pub.publish(self._marker_topic,self._marker)
 
         if (userdata.indice > 0 and userdata.indice < len(userdata.plan.poses)):
             Logger.loginfo("   Access data for index %d" % (userdata.indice) )
@@ -385,13 +383,13 @@ class PurePursuitState(EventState):
         if (self._return):
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
-            if self._pub:
+            if self._cmd_topic:
                 self._pub.publish(self._cmd_topic, Twist())
 
-            if self._pub_stamped:
+            if self._cmd_topic_stamped:
                 ts = TwistStamped() # Zero twist to stop if blocked
                 ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-                self._pub_stamped.publish(self._cmd_topic_stamped, ts)
+                self._pub.publish(self._cmd_topic_stamped, ts)
 
             return self._return
 
@@ -440,7 +438,7 @@ class PurePursuitState(EventState):
              return 'failed'
 
         # Assume we can go the desired velocity
-        self._twist.twist.linear.x = self._desired_velocity
+        self._twist.linear.x = self._desired_velocity
 
         lookahead = None
         lookahead = self.calculateLineTwist(local_prior, local_target)
@@ -452,34 +450,35 @@ class PurePursuitState(EventState):
              return self._return # return what was set (either 'failed' or 'done')
 
         # Sanity check the rotation rate
-        if (math.fabs(self._twist.twist.angular.z) > self._max_rotation_rate):
-            self._twist.twist.linear.x  = self._desired_velocity*self._max_rotation_rate/math.fabs(self._twist.twist.angular.z) # decrease the speed
-            self._twist.twist.angular.z = math.copysign(self._max_rotation_rate, self._twist.twist.angular.z)
+        if (math.fabs(self._twist.angular.z) > self._max_rotation_rate):
+            self._twist.linear.x  = self._desired_velocity*self._max_rotation_rate/math.fabs(self._twist.angular.z) # decrease the speed
+            self._twist.angular.z = math.copysign(self._max_rotation_rate, self._twist.angular.z)
 
         # Normal operation - publish the latest calculated twist
-        if self._pub:
+        if self._cmd_topic:
             self._pub.publish(self._cmd_topic, self._twist)
 
-        if self._pub_stamped:
+        if self._cmd_topic_stamped:
             self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-            self._twist_stamped.twist = self._twist
+            self._twist_stamped.twist.linear.x = self._twist.linear.x
+            self._twist_stamped.twist.angular.z = self._twist.angular.z
             self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
 
-        if (self._marker_pub):
-            self._marker_pub.publish(self._marker_topic,self._reference_marker)
-            self._marker_pub.publish(self._marker_topic,self._local_target_marker)
+        if (self._marker):
+            self._pub.publish(self._marker_topic,self._reference_marker)
+            self._pub.publish(self._marker_topic,self._local_target_marker)
 
         return None
 
     def on_exit(self, userdata):
         # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
         elapsed_time = self._node.get_clock().now() - self._start_time
-        if (self._marker_pub):
+        if (self._marker):
             self._marker.color.a = 1.0 # Don't forget to set the alpha!
             self._marker.color.r = 0.8 # Indicate this target is no longer active
             self._marker.color.g = 0.0
             self._marker.color.b = 0.0
-            self. _marker_pub.publish(self._marker_topic,self._marker)
+            self._pub.publish(self._marker_topic,self._marker)
 
     # Method to calculate the lookahead point given line segment from prior to target
     def calculateLineTwist(self, local_prior, local_target):
@@ -590,7 +589,7 @@ class PurePursuitState(EventState):
                 control_robot = self.transformBody(control)
 
                 curvature = 2.0*control_robot.point.y/(self._lookahead*self._lookahead)
-                self._twist.twist.angular.z  = curvature*self._desired_velocity
+                self._twist.angular.z  = curvature*self._desired_velocity
                 return control_robot
 
         return None

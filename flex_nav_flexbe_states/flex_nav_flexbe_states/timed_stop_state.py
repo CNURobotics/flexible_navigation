@@ -79,31 +79,28 @@ class TimedStopState(EventState):
         self._odom_topic = odom_topic
         self._odom_sub = ProxySubscriberCached({self._odom_topic: Odometry})
 
+        self._pub = ProxyPublisher()
+        self._twist = Twist()
         if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
-            self._twist = Twist() # defaults to zero
             self._cmd_topic = cmd_topic
-            self._pub = ProxyPublisher({self._cmd_topic: Twist})
+            self._pub.createPublisher( cmd_topic, Twist)
         else:
-            self._twist = None
             self._cmd_topic = None
-            self._pub = None
-
 
         if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
             self._twist_stamped  = TwistStamped()
             self._cmd_topic_stamped = cmd_topic_stamped
-            self._pub_stamped  = ProxyPublisher({self._cmd_topic_stamped: TwistStamped})
+            self._pub.createPublisher( cmd_topic_stamped, TwistStamped)
         else:
             self._twist_stamped  = None
             self._cmd_topic_stamped = None
-            self._pub_stamped  = None
 
-        if self._pub is None and self._pub_stamped is None:
+        if self._cmd_topic is None and self._cmd_topic_stamped is None:
             Logger.logerr("Must define at least one cmd or cmd_stamped publishing topic")
         if self._cmd_topic == self._cmd_topic_stamped:
             Logger.logerr("Must define differnt names for cmd_topic and cmd_topic_stamped topics")
 
-        assert self._pub or self._pub_stamped, "Must define at least one cmd publishing topic"
+        assert self._cmd_topic or self._cmd_topic_stamped, "Must define at least one cmd publishing topic"
         assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
 
     def execute(self, userdata):
@@ -113,12 +110,12 @@ class TimedStopState(EventState):
             # We have completed the state, and therefore must be blocked by autonomy level
             # publish commands and return the prior outcome
 
-            if self._pub:
+            if self._cmd_topic:
                 self._pub.publish(self._cmd_topic, self._twist)
 
-            if self._pub_stamped:
+            if self._cmd_topic_stamped:
                 self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-                self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+                self._pub.publish(self._cmd_topic_stamped, self._twist_stamped)
 
             return self._done
 
@@ -144,23 +141,23 @@ class TimedStopState(EventState):
 
 
         # Normal operation publish the zero twist
-        if self._pub:
+        if self._cmd_topic:
             self._pub.publish(self._cmd_topic, self._twist)
 
-        if self._pub_stamped:
+        if self._cmd_topic_stamped:
             self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+            self._pub.publish(self._cmd_topic_stamped, self._twist_stamped)
 
         return None
 
     def on_enter(self, userdata):
         # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
-        if self._pub:
+        if self._cmd_topic:
             self._pub.publish(self._cmd_topic, self._twist)
 
-        if self._pub_stamped:
+        if self._cmd_topic_stamped:
             self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+            self._pub.publish(self._cmd_topic_stamped, self._twist_stamped)
 
         self._start_time = self._node.get_clock().now()
         self._done       = None # reset the completion flag
