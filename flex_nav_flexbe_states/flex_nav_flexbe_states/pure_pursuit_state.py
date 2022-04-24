@@ -462,7 +462,7 @@ class PurePursuitState(EventState):
             self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
             self._twist_stamped.twist.linear.x = self._twist.linear.x
             self._twist_stamped.twist.angular.z = self._twist.angular.z
-            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+            self._pub.publish(self._cmd_topic_stamped, self._twist_stamped)
 
         if (self._marker):
             self._pub.publish(self._marker_topic,self._reference_marker)
