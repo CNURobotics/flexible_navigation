@@ -111,7 +111,7 @@ class RotateAngleState(EventState):
             if self._cmd_topic_stamped:
                 ts = TwistStamped() # Zero twist to stop if blocked
                 ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-                self._pub_stamped.publish(self._cmd_topic_stamped, ts)
+                self._pub.publish(self._cmd_topic_stamped, ts)
 
             return self._return
 
@@ -129,7 +129,7 @@ class RotateAngleState(EventState):
 
         if self._cmd_topic_stamped:
             self._twist_stamped.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
-            self._pub_stamped.publish(self._cmd_topic_stamped, self._twist_stamped)
+            self._pub.publish(self._cmd_topic_stamped, self._twist_stamped)
 
         return None
 
