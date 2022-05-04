@@ -77,7 +77,7 @@ class TimedStopState(EventState):
         self._done = None # Track the outcome so we can detect if transition is blocked
 
         self._odom_topic = odom_topic
-        self._odom_sub = ProxySubscriberCached({self._odom_topic: Odometry})
+        self._odom_sub = ProxySubscriberCached({self._odom_topic: Odometry}, id=id(self))
 
         self._pub = ProxyPublisher()
         self._twist = Twist()

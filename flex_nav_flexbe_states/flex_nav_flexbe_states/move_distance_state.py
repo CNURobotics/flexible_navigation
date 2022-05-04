@@ -79,7 +79,7 @@ class MoveDistanceState(EventState):
         ProxySubscriberCached._initialize(MoveDistanceState._node)
 
         self._odom_topic   = odometry_topic
-        self._odom_sub     = ProxySubscriberCached({self._odom_topic:  Odometry})
+        self._odom_sub     = ProxySubscriberCached({self._odom_topic:  Odometry}, id=id(self))
 
         self._starting_odom = None
 

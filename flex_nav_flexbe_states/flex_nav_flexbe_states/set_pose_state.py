@@ -38,8 +38,6 @@ import math
 
 from flexbe_core import EventState, Logger
 
-from flexbe_core.proxy import ProxySubscriberCached
-
 from geometry_msgs.msg import PoseStamped
 
 class SetPoseState(EventState):

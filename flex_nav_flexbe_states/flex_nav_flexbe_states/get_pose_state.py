@@ -60,7 +60,7 @@ class GetPoseState(EventState):
         ProxySubscriberCached._initialize(GetPoseState._node)
 
         self._topic = topic
-        self._sub = ProxySubscriberCached({self._topic: PoseStamped})
+        self._sub = ProxySubscriberCached({self._topic: PoseStamped}, id=id(self))
         self._goal_pose = None
 
     def execute(self, userdata):

@@ -151,7 +151,7 @@ class PurePursuitState(EventState):
         self._tf_buffer    = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, PurePursuitState._node)
 
-        self._odom_sub = ProxySubscriberCached({self._odom_topic:  Odometry})
+        self._odom_sub = ProxySubscriberCached({self._odom_topic:  Odometry}, id=id(self))
         self._twist = Twist()
         self._twist.linear.x  = desired_velocity
         self._twist.angular.z = 0.0
@@ -475,7 +475,7 @@ class PurePursuitState(EventState):
         # This method is called when the state transitions to another state
         # NOTE: We are NOT stopping command to allow for continuous transition
         # to a following segment. It is up to user issue stop command
-        
+
         elapsed_time = self._node.get_clock().now() - self._start_time
         if (self._marker):
             self._marker.color.a = 1.0 # Don't forget to set the alpha!
