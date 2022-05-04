@@ -301,6 +301,7 @@ class PurePursuitState(EventState):
 
     def on_start(self):
         self._return = None # Clear completion flag
+        self._start_time = None
 
         # Wait for odometry message
         rate = PurePursuitState._node.create_rate(0.25)
@@ -471,7 +472,10 @@ class PurePursuitState(EventState):
         return None
 
     def on_exit(self, userdata):
-        # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
+        # This method is called when the state transitions to another state
+        # NOTE: We are NOT stopping command to allow for continuous transition
+        # to a following segment. It is up to user issue stop command
+        
         elapsed_time = self._node.get_clock().now() - self._start_time
         if (self._marker):
             self._marker.color.a = 1.0 # Don't forget to set the alpha!
@@ -479,6 +483,37 @@ class PurePursuitState(EventState):
             self._marker.color.g = 0.0
             self._marker.color.b = 0.0
             self._pub.publish(self._marker_topic,self._marker)
+        self._start_time = None
+
+    def on_stop(self):
+        """
+        Will be executed once when the behavior stops or is preempted.
+        """
+        if self._start_time is not None:
+            Logger.logerr('%s   Emergency stop if stopped when active '% (self.name))
+            if self._cmd_topic:
+                self._pub.publish(self._cmd_topic, Twist())
+
+            if self._cmd_topic_stamped:
+                ts = TwistStamped() # Zero twist to stop if blocked
+                ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub.publish(self._cmd_topic_stamped, ts)
+            self._start_time = None
+
+    def on_pause(self):
+        """
+        Will be executed each time this state is paused.
+        """
+        if self._start_time is not None:
+            Logger.logerr('%s   Emergency stop if paused when active '% (self.name))
+            if self._cmd_topic:
+                self._pub.publish(self._cmd_topic, Twist())
+
+            if self._cmd_topic_stamped:
+                ts = TwistStamped() # Zero twist to stop if blocked
+                ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub.publish(self._cmd_topic_stamped, ts)
+            self._start_time = None
 
     # Method to calculate the lookahead point given line segment from prior to target
     def calculateLineTwist(self, local_prior, local_target):
