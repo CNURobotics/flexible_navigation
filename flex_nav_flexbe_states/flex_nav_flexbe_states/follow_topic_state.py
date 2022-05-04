@@ -118,3 +118,25 @@ class FollowTopicState(EventState):
         if self._client.is_active(self._controller_topic):
             Logger.logerr('%s  Canceling active goal' % (self.name))
             self._client.cancel(self._controller_topic)
+
+    def on_stop(self):
+        """
+        Will be executed once when the behavior stops or is preempted.
+        """
+        if self._controller_topic in ProxyActionClient._result:
+            ProxyActionClient._result[self._controller_topic] = None
+
+        if self._client.is_active(self._controller_topic):
+            Logger.logerr('%s   Canceling active goal on SM stop'% (self.name))
+            self._client.cancel(self._controller_topic)
+
+    def on_pause(self):
+        """
+        Will be executed each time this state is paused.
+        """
+        if self._controller_topic in ProxyActionClient._result:
+            ProxyActionClient._result[self._controller_topic] = None
+
+        if self._client.is_active(self._controller_topic):
+            Logger.logerr('%s   Canceling active goal on SM pause'% (self.name))
+            self._client.cancel(self._controller_topic)

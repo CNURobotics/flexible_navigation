@@ -64,9 +64,9 @@ class RotateAngleState(EventState):
 
         ProxyPublisher._initialize(RotateAngleState._node)
 
-        self._target_time           = Duration(seconds=target_time)
-        self._target_angle          = target_angle*3.141593/180.0
-        self._twist                 = Twist()
+        self._target_time     = Duration(seconds=target_time)
+        self._target_angle    = target_angle*3.141593/180.0
+        self._twist           = Twist()
         self._twist.linear.x  = 0.0
         self._twist.angular.z = (self._target_angle / target_time)
 

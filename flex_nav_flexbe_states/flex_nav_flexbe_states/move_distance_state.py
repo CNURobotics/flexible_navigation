@@ -73,7 +73,7 @@ class MoveDistanceState(EventState):
         # Thus, we cannot save the starting time now and will do so later.
         self._start_time = None
 
-        self._return     = None # Track the outcome so we can detect if transition is blocked
+        self._return     = "Initialized" # Track the outcome so we can detect if transition is blocked
 
         ProxyPublisher._initialize(MoveDistanceState._node)
         ProxySubscriberCached._initialize(MoveDistanceState._node)
@@ -111,7 +111,7 @@ class MoveDistanceState(EventState):
 
     def execute(self, userdata):
 
-        if (self._return):
+        if self._return:
             # We have completed the state, and therefore must be blocked by autonomy level
             # Stop the robot, but and return the prior outcome
             if self._cmd_topic:
@@ -181,10 +181,38 @@ class MoveDistanceState(EventState):
 
     def on_enter(self, userdata):
         # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
+        self._start_time = self._node.get_clock().now()
+        self._return       = None # reset the completion flag
         if (self._sub.has_msg(self._odom_topic)):
             self._starting_odom = self._sub.get_last_msg(self._odom_topic)
-            self._start_time = self._node.get_clock().now()
-            self._return       = None # reset the completion flag
         else:
             Logger.logerr(' Cannot move - no odometry message to track!' )
             self._return = 'failed'
+
+    def on_stop(self):
+        """
+        Will be executed once when the behavior stops or is preempted.
+        """
+        if self._return is None:
+            Logger.logerr('%s   Emergency stop on SM stop if state is active'% (self.name))
+            if self._cmd_topic:
+                self._pub.publish(self._cmd_topic, Twist())
+
+            if self._cmd_topic_stamped:
+                ts = TwistStamped() # Zero twist to stop if blocked
+                ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub.publish(self._cmd_topic_stamped, ts)
+
+    def on_pause(self):
+        """
+        Will be executed each time this state is paused.
+        """
+        if self._return is None:
+            Logger.logerr('%s   Emergency stop on SM pause if state is active'% (self.name))
+            if self._cmd_topic:
+                self._pub.publish(self._cmd_topic, Twist())
+
+            if self._cmd_topic_stamped:
+                ts = TwistStamped() # Zero twist to stop if blocked
+                ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
+                self._pub.publish(self._cmd_topic_stamped, ts)
