@@ -28,8 +28,11 @@ namespace flex_nav_behavior_server
 BehaviorServer::BehaviorServer(const rclcpp::NodeOptions & options)
 : nav2_util::LifecycleNode("behaviors_server", "", false, options),
   plugin_loader_("nav2_core", "nav2_core::Behavior"),
-  default_ids_{"spin", "backup", "wait"},
-  default_types_{"nav2_behaviors/Spin", "nav2_behaviors/BackUp", "nav2_behaviors/Wait"}
+  default_ids_{"spin", "backup", "drive_on_heading", "wait"},
+  default_types_{"nav2_behaviors/Spin",
+                 "nav2_behaviors/BackUp",
+                 "nav2_behaviors/DriveOnHeading",
+                 "nav2_behaviors/Wait"}
 {
   declare_parameter(
     "costmap_topic",
@@ -38,7 +41,7 @@ BehaviorServer::BehaviorServer(const rclcpp::NodeOptions & options)
     "footprint_topic",
     rclcpp::ParameterValue(std::string("local_costmap/published_footprint")));
   declare_parameter("cycle_frequency", rclcpp::ParameterValue(10.0));
-  declare_parameter("behavior_plugins", rclcpp::ParameterValue(default_ids_));
+  declare_parameter("behavior_plugins", default_ids_);
 
   get_parameter("behavior_plugins", behavior_ids_);
   if (behavior_ids_ == default_ids_) {
@@ -94,13 +97,6 @@ BehaviorServer::on_configure(const rclcpp_lifecycle::State & /*state*/)
   //  //,    global_frame, robot_base_frame, transform_tolerance_);
   collision_checker_ = std::make_shared<nav2_costmap_2d::CostmapTopicCollisionChecker>(
     *costmap_sub_, *footprint_sub_, this->get_name());
-
-  this->get_parameter("behavior_plugins", behavior_ids_);
-  if (behavior_ids_ == default_ids_) {
-    for (size_t i = 0; i < default_ids_.size(); ++i) {
-      declare_parameter(default_ids_[i] + ".plugin", default_types_[i]);
-    }
-  }
 
   behavior_types_.resize(behavior_ids_.size());
   if (!loadBehaviorPlugins()) {
