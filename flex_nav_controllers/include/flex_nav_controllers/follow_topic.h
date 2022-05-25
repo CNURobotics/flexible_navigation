@@ -55,7 +55,6 @@
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "nav2_costmap_2d/costmap_2d.hpp"
 #include "nav2_costmap_2d/costmap_layer.hpp"
-#include "nav2_controller/nav2_controller.hpp"
 #include "nav_2d_utils/odom_subscriber.hpp"
 #include "nav2_util/robot_utils.hpp"
 #include "nav2_util/lifecycle_node.hpp"

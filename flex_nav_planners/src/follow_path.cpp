@@ -37,7 +37,7 @@
 #include <flex_nav_planners/follow_common.h>
 #include <flex_nav_planners/follow_path.h>
 #include <geometry_msgs/msg/twist.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 namespace flex_nav {
   FollowPath::FollowPath()

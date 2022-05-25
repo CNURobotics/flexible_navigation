@@ -11,6 +11,7 @@ find_package(rclpy REQUIRED)
 
 find_package(flex_nav_common REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(dwb_core REQUIRED)
 find_package(nav2_core REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(nav2_navfn_planner REQUIRED)
@@ -24,10 +25,12 @@ set(dependencies
   rclcpp
   rclcpp_action
   rclpy
+  dwb_core
   flex_nav_common
   std_msgs
   nav2_core
 	nav2_msgs
+  nav2_navfn_planner
   nav2_util
   geometry_msgs
 )

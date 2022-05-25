@@ -40,7 +40,7 @@
 #include <tf2_ros/buffer.h>
 #include <geometry_msgs/msg/pose_stamped.h>
 #include <geometry_msgs/msg/quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 namespace flex_nav {
 /**

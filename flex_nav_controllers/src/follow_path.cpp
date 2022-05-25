@@ -34,7 +34,7 @@
  ******************************************************************************/
 
 #include <flex_nav_controllers/follow_path.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include "nav_2d_utils/conversions.hpp"
 #include "nav_2d_utils/tf_help.hpp"
 #include "nav2_core/exceptions.hpp"
