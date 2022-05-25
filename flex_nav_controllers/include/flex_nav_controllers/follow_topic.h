@@ -52,6 +52,7 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "tf2_ros/buffer.h"
 #include "nav2_core/goal_checker.hpp"
+#include "nav2_core/progress_checker.hpp"
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "nav2_costmap_2d/costmap_2d.hpp"
 #include "nav2_costmap_2d/costmap_layer.hpp"
