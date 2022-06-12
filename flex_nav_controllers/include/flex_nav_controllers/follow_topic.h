@@ -81,7 +81,7 @@ public:
    * @brief The constructor to instantiate a node
    * @param tf A reference to a TransformListener
    */
-  FollowTopic();
+  FollowTopic(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
 
   /**
    * @brief The destructor to tear down a node

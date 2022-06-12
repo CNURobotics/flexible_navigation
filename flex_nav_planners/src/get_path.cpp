@@ -41,8 +41,8 @@
 #include "nav2_util/costmap.hpp"
 
 namespace flex_nav {
-  GetPath::GetPath()
-      :  nav2_util::LifecycleNode("get_path", "", true),
+  GetPath::GetPath(const rclcpp::NodeOptions & options)
+      :  nav2_util::LifecycleNode("get_path", "", options),
         gp_loader_("nav2_core", "nav2_core::GlobalPlanner"),
         default_id_{"GridBased"},
         default_type_{"nav2_navfn_planner/NavfnPlanner"},
@@ -72,13 +72,19 @@ namespace flex_nav {
     name_ = this->get_name();
     RCLCPP_INFO(get_logger(), "Configuring %s ... ", name_.c_str());
     gp_server_ = std::make_unique<GetPathActionServer>(
-      rclcpp_node_,
+      get_node_base_interface(),
+      get_node_clock_interface(),
+      get_node_logging_interface(),
+      get_node_waitables_interface(),
       name_,
       std::bind(&GetPath::execute, this));
 
     RCLCPP_DEBUG(get_logger(), "Configuring %s cc server ... ", name_.c_str());
     cc_server_ = std::make_unique<ClearCostmapActionServer>(
-      rclcpp_node_,
+      get_node_base_interface(),
+      get_node_clock_interface(),
+      get_node_logging_interface(),
+      get_node_waitables_interface(),
       name_ + "/clear_costmap",
       std::bind(&GetPath::clear_costmap, this));
 

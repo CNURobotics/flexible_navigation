@@ -45,8 +45,8 @@
 #include <exception>
 
 namespace flex_nav {
-  FollowPath::FollowPath()
-      : nav2_util::LifecycleNode("follow_path", "", true),
+  FollowPath::FollowPath(const rclcpp::NodeOptions & options)
+      : nav2_util::LifecycleNode("follow_path", "", options),
         progress_checker_loader_("nav2_core", "nav2_core::ProgressChecker"),
         default_progress_checker_id_{"progress_checker"},
         default_progress_checker_type_{"nav2_controller::SimpleProgressChecker"},
@@ -90,13 +90,21 @@ namespace flex_nav {
     RCLCPP_INFO(get_logger(), "Configuring %s", name_.c_str());
 
     fp_server_ = std::make_unique<FollowPathActionServer>(
-      rclcpp_node_,
+      get_node_base_interface(),
+      get_node_clock_interface(),
+      get_node_logging_interface(),
+      get_node_waitables_interface(),
       name_,
       std::bind(&FollowPath::execute, this));
 
+
+
     RCLCPP_DEBUG(get_logger(), "Configuring CM action server for %s", name_.c_str());
     cc_server_ = std::make_unique<ClearCostmapActionServer>(
-      rclcpp_node_,
+      get_node_base_interface(),
+      get_node_clock_interface(),
+      get_node_logging_interface(),
+      get_node_waitables_interface(),
       name_ + "/clear_costmap",
       std::bind(&FollowPath::clear_costmap, this));
 
@@ -151,8 +159,8 @@ namespace flex_nav {
       goal_checker_type_ = nav2_util::get_plugin_type_param(node, goal_checker_id_);
       goal_checker_ = goal_checker_loader_.createUniqueInstance(goal_checker_type_);
       RCLCPP_DEBUG(get_logger(), "Created goal_checker : %s of type %s",
-        goal_checker_id_.c_str(), goal_checker_type_.c_str());
-      goal_checker_->initialize(node, goal_checker_id_);
+          goal_checker_id_.c_str(), goal_checker_type_.c_str());
+      goal_checker_->initialize(node, goal_checker_id_, costmap_ros_);
     } catch (const pluginlib::PluginlibException & ex) {
       RCLCPP_FATAL(get_logger(), "Failed to create goal_checker. Exception: %s",
         ex.what());

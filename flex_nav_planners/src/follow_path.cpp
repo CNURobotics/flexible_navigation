@@ -40,8 +40,8 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 namespace flex_nav {
-  FollowPath::FollowPath()
-      : nav2_util::LifecycleNode("follow_path", "", true),
+  FollowPath::FollowPath(const rclcpp::NodeOptions & options)
+      : nav2_util::LifecycleNode("follow_path", "", options),
         fp_loader_("nav2_core", "nav2_core::GlobalPlanner"),
         default_id_{"GridBased"},
         default_type_{"nav2_navfn_planner/NavfnPlanner"},
@@ -77,12 +77,18 @@ namespace flex_nav {
     name_ = this->get_name();
     RCLCPP_INFO(get_logger(), "Configuring %s", name_.c_str());
     fp_server_ = std::make_unique<FollowPathActionServer>(
-      rclcpp_node_,
+      get_node_base_interface(),
+      get_node_clock_interface(),
+      get_node_logging_interface(),
+      get_node_waitables_interface(),
       name_,
       std::bind(&FollowPath::execute, this));
 
     cc_server_ = std::make_unique<ClearCostmapActionServer>(
-      rclcpp_node_,
+      get_node_base_interface(),
+      get_node_clock_interface(),
+      get_node_logging_interface(),
+      get_node_waitables_interface(),
       name_ + "/clear_costmap",
       std::bind(&FollowPath::clear_costmap, this));
 

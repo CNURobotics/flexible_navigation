@@ -29,6 +29,7 @@
   <exec_depend>flex_nav_flexbe_states</exec_depend>
   <exec_depend>flex_nav_controllers</exec_depend>
   <exec_depend>flex_nav_planners</exec_depend>
+  <exec_depend>flex_nav_behaviors</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
