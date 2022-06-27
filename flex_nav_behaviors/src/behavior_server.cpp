@@ -50,6 +50,11 @@ BehaviorServer::BehaviorServer(const rclcpp::NodeOptions & options)
     }
   }
 
+  bool use_sim_time;
+  get_parameter("use_sim_time", use_sim_time);
+  RCLCPP_INFO(get_logger(), "Using simulation time %d", use_sim_time);
+
+
   declare_parameter(
     "global_frame",
     rclcpp::ParameterValue(std::string("odom")));
