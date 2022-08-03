@@ -52,10 +52,10 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "tf2_ros/buffer.h"
 #include "nav2_core/goal_checker.hpp"
+#include "nav2_core/progress_checker.hpp"
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "nav2_costmap_2d/costmap_2d.hpp"
 #include "nav2_costmap_2d/costmap_layer.hpp"
-#include "nav2_controller/nav2_controller.hpp"
 #include "nav_2d_utils/odom_subscriber.hpp"
 #include "nav2_util/robot_utils.hpp"
 #include "nav2_util/lifecycle_node.hpp"
@@ -81,7 +81,7 @@ public:
    * @brief The constructor to instantiate a node
    * @param tf A reference to a TransformListener
    */
-  FollowTopic();
+  FollowTopic(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
 
   /**
    * @brief The destructor to tear down a node

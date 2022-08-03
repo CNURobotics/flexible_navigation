@@ -19,15 +19,15 @@
 #include <string>
 #include <memory>
 
-#include "flex_nav_recoveries/recovery_server.hpp"
+#include "flex_nav_behaviors/behavior_server.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  auto recoveries_node = std::make_shared<flex_nav_recovery_server::RecoveryServer>();
+  auto behaviors_node = std::make_shared<flex_nav_behavior_server::BehaviorServer>();
 
-  rclcpp::spin(recoveries_node->get_node_base_interface());
+  rclcpp::spin(behaviors_node->get_node_base_interface());
   rclcpp::shutdown();
 
   return 0;

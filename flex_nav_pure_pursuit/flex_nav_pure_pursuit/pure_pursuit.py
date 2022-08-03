@@ -32,10 +32,12 @@
 #       WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 #       POSSIBILITY OF SUCH DAMAGE.
 ###############################################################################
-
-from copy import deepcopy
 import math
 import numpy as np
+import traceback
+import sys
+
+from copy import deepcopy
 import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
@@ -173,7 +175,7 @@ class PurePursuit(Node):
         self._location = PointStamped()
 
         # Action server
-        self._action_name = name
+        self._action_name = self.get_name()
 
         # Subscriber
         self._sub = None
@@ -523,27 +525,45 @@ class PurePursuit(Node):
 
         return None
 
-    def transformFrame(self, pose, target_frame_id):
+    def transformFrame(self, odom_msg, target_frame_id):
         """
-        Transforms a PoseStamped into another map frame
+        Transforms an Odometry message into another frame
 
         Args:
-            pose (PoseStamped): The pose to transform
+            odom_msg: The pose to transform
             target_frame_id (str): The frame to transform to
         """
 
-        odom_position = PointStamped()
-        odom_position.header = pose.header
-        odom_position.point = pose.pose.pose.position
+        position = PointStamped()
+        position.header = odom_msg.header
+        position.point = odom_msg.pose.pose.position
 
         try:
-            return self._tf_listener.transformPoint(target_frame_id, odom_position)
+            #return self._tf_listener.transformPoint(target_frame_id, position)
+            return self._tf_buffer.transform(position, target_frame_id, timeout=self._timeout, new_type = None)
+
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            self.get_logger().warn('%s Failed to get the transformFrame to target_frame:\n%s' % (self.get_name(), str(e)))
+            self.get_logger().warn(f'{self.get_name()}: Failed to get the transform from {position.header.frame_id} to {target_frame_id} frame\n {type(e)} {str(e)}')
+            self._failed = True
+            return None
+        except (TypeError, tf2_ros.buffer_interface.TypeException) as e:
+            # https://github.com/ros2/geometry2/issues/110
+            msg = f'Failed to get the transformation from {position.header.frame_id} to {target_frame_id} frame due to type conversion error\n {type(e)} {str(e)}'
+            msg = msg.replace('<',"[") # Avoid string format issues with logger
+            msg = msg.replace('>',"]")
+            Logger.logwarn(msg)
+            Logger.loginfo("See note in CHANGELOG")
             self._failed = True
             return None
         except Exception as e:
-            self.get_logger().logwarn('%s Failed to get the transformFrame to target frame due to unknown error:\n%s' % (self.get_name(), str(e)))
+            msg = f'Failed to get the transformation from {position.header.frame_id} to {target_frame_id} frame due to unknown error\n {type(e)} {str(e)}'
+            msg = msg.replace('<',"[") # Avoid string format issues with logger
+            msg = msg.replace('>',"]")
+            Logger.logwarn(msg)
+            trace = traceback.format_exc()
+            Logger.localinfo(f' --------------------- Trace ------------------------------')
+            Logger.localinfo(f''' Trace: {trace.replace("%", "%%")}''')
+            Logger.localinfo(f' --------------------- Trace ------------------------------')
             self._failed = True
             return None
 

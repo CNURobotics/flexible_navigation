@@ -36,8 +36,11 @@
 ###############################################################################
 
 import math
-import time
 import numpy as np
+import time
+import traceback
+import sys
+
 from copy import deepcopy
 import rclpy
 from rclpy.duration import Duration
@@ -151,7 +154,7 @@ class PurePursuitState(EventState):
         self._tf_buffer    = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, PurePursuitState._node)
 
-        self._odom_sub = ProxySubscriberCached({self._odom_topic:  Odometry})
+        self._odom_sub = ProxySubscriberCached({self._odom_topic:  Odometry}, id=id(self))
         self._twist = Twist()
         self._twist.linear.x  = desired_velocity
         self._twist.angular.z = 0.0
@@ -254,48 +257,33 @@ class PurePursuitState(EventState):
         else:
             self._marker = None
 
-    # Transform point into odometry frame
-    def transformOdom(self, point):
-        try:
-            # Get transform
-            return self._tf_buffer.transform(point, self._odom_frame, timeout=self._timeout, new_type = None)
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            Logger.logwarn('Failed to get the transformation to odom frame\n%s' % str(e))
-            self._failed = True
-            return None
-        except Exception as e:
-            Logger.logwarn("Currently, unable to use Pure Pursuit due to TF2 issue #110 furthered described in CHANGELOG")
-            Logger.logwarn('Failed to get the transformation to odom frame due to unknown error\n %s' % str(e) )
-            self._failed = True
-            return None
-
     # Transform point into map frame
-    def transformMap(self, point):
+    def transformFrame(self, point, frame_id):
         try:
             # Get transform
-            return self._tf_buffer.transform(point, self._target_frame, timeout=self._timeout, new_type = None)
+            return self._tf_buffer.transform(point, frame_id, timeout=self._timeout, new_type = None)
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            Logger.logwarn('Failed to get the transformation to target_frame\n%s' % str(e))
+            Logger.logwarn(f'Failed to get the transformation to target_frame {frame_id}\n{type(e)} {str(e)}')
+            self._failed = True
+            return None
+        except (TypeError, tf2_ros.buffer_interface.TypeException) as e:
+            # https://github.com/ros2/geometry2/issues/110
+            msg = f'Failed to get the transformation from {point.header.frame_id} to {frame_id} frame due to type conversion error\n {type(e)} {str(e)}'
+            msg = msg.replace('<',"[") # Avoid string format issues with logger
+            msg = msg.replace('>',"]")
+            Logger.logwarn(msg)
+            Logger.loginfo("See note in CHANGELOG")
             self._failed = True
             return None
         except Exception as e:
-            Logger.logwarn("Currently, unable to use Pure Pursuit due to TF2 issue #110 furthered described in CHANGELOG")
-            Logger.logwarn('Failed to get the transformation to target frame due to unknown error\n %s' % str(e) )
-            self._failed = True
-            return None
-
-    # Transform point into robot body frame
-    def transformBody(self, point):
-        try:
-            # Get transform
-            return self._tf_buffer.transform(point, self._robot_frame, timeout=self._timeout, new_type = None)
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            Logger.logwarn('Failed to get the transformation to robot body frame\n%s' % str(e))
-            self._failed = True
-            return None
-        except:
-            Logger.logwarn("Currently, unable to use Pure Pursuit due to TF2 issue #110 furthered described in CHANGELOG")
-            Logger.logwarn('Failed to get the transformation to robot body frame due to unknown error\n' )
+            msg = f'Failed to get the transformation from {point.header.frame_id} to {frame_id} frame due to unknown error\n {type(e)} {str(e)}'
+            msg = msg.replace('<',"[") # Avoid string format issues with logger
+            msg = msg.replace('>',"]")
+            Logger.logwarn(msg)
+            trace = traceback.format_exc()
+            Logger.localinfo(f' --------------------- Trace ------------------------------')
+            Logger.localinfo(f''' Trace: {trace.replace("%", "%%")}''')
+            Logger.localinfo(f' --------------------- Trace ------------------------------')
             self._failed = True
             return None
 
@@ -312,23 +300,23 @@ class PurePursuitState(EventState):
         self._last_odom = self._sub.get_last_msg(self._odom_topic)
         self._odom_frame = self._last_odom.header.frame_id
         Logger.loginfo('   odometry frame id <%s>' % (self._odom_frame))
-
-        # Update the target transformation
-        # self._target.header.stamp = self._last_odom.header.stamp
-        while (self.transformOdom(self._target) is None):
-            Logger.logwarn('Waiting for tf2_ros transformations to odometry frame to become available from the robot ' )
-            rate.sleep()
-            self._target.header.stamp = self._node.get_clock().now().to_msg()
-
-        while (self.transformMap(self._last_odom) is None):
-            Logger.logwarn('Waiting for tf2_ros transformations to map frame become available from the robot ' )
-            rate.sleep()
-            self._last_odom = self._sub.get_last_msg(self._odom_topic)
-
         point = PointStamped()
         point.header = self._last_odom.header
         point.point = self._last_odom.pose.pose.position
-        self._current_position = self.transformMap(point)
+
+        # Confirm transformations available
+        while (self.transformFrame(point, self._target_frame) is None):
+            Logger.logwarn(f'Waiting for tf2_ros transformations from odometry frame {point.header.frame_id} to target {self._target_frame} available from the robot ' )
+            rate.sleep()
+            self._target.header.stamp = self._node.get_clock().now().to_msg()
+            if self._odom_sub.has_msg(self._odom_topic):
+                self._last_odom = self._sub.get_last_msg(self._odom_topic)
+                self._odom_frame = self._last_odom.header.frame_id
+                Logger.loginfo('  Update latest odometry message - frame id <%s>' % (self._odom_frame))
+                point.header = self._last_odom.header
+                point.point = self._last_odom.pose.pose.position
+
+        self._current_position = self.transformFrame(point, self._target_frame)
         Logger.loginfo("Starting point = " + str(self._current_position.x) + " " + str(self._current_position.y))
 
         # This method is called when the state becomes active
@@ -403,7 +391,7 @@ class PurePursuitState(EventState):
         point.point = self._last_odom.pose.pose.position
 
         # Update the current pose
-        self._current_position = self.transformMap(point)
+        self._current_position = self.transformFrame(point, self._target_frame)
 
         if (self._current_position is None):
             Logger.loginfo("Could not get transform position")
@@ -415,7 +403,7 @@ class PurePursuitState(EventState):
 
         # Transform the target points into the current odometry frame
         self._target.header.stamp = self._last_odom.header.stamp
-        local_target = self._target; #self.transformOdom(self._target)
+        local_target = self._target
 
         # If target point is withing lookahead distance then we are done
         dr = np.sqrt((local_target.point.x - self._current_position.point.x)**2 + (local_target.point.y - self._current_position.point.y)**2)
@@ -433,7 +421,7 @@ class PurePursuitState(EventState):
 
         # Transform the prior target point into the current odometry frame
         self._prior.header.stamp = self._last_odom.header.stamp
-        local_prior = self._prior #self.transformOdom(self._prior)
+        local_prior = self._prior
         if (self._failed):
              self._return = 'failed'
              return 'failed'
@@ -475,7 +463,7 @@ class PurePursuitState(EventState):
         # This method is called when the state transitions to another state
         # NOTE: We are NOT stopping command to allow for continuous transition
         # to a following segment. It is up to user issue stop command
-        
+
         elapsed_time = self._node.get_clock().now() - self._start_time
         if (self._marker):
             self._marker.color.a = 1.0 # Don't forget to set the alpha!
@@ -621,7 +609,7 @@ class PurePursuitState(EventState):
                 self._reference_marker.pose.position = control.point
                 self._local_target_marker.pose.position = local_target.point
 
-                control_robot = self.transformBody(control)
+                control_robot = self.transformFrame(control, self._robot_frame)
 
                 curvature = 2.0*control_robot.point.y/(self._lookahead*self._lookahead)
                 self._twist.angular.z  = curvature*self._desired_velocity

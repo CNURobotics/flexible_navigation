@@ -43,8 +43,8 @@
 #include <geometry_msgs/msg/twist_stamped.hpp>
 
 namespace flex_nav {
-  FollowTopic::FollowTopic()
-      : nav2_util::LifecycleNode("follow_topic", "", true),
+  FollowTopic::FollowTopic(const rclcpp::NodeOptions & options)
+      : nav2_util::LifecycleNode("follow_topic", "", options),
         progress_checker_loader_("nav2_core", "nav2_core::ProgressChecker"),
         default_progress_checker_id_{"progress_checker"},
         default_progress_checker_type_{"nav2_controller::SimpleProgressChecker"},
@@ -87,12 +87,18 @@ namespace flex_nav {
     RCLCPP_INFO(get_logger(), "Configuring  %s", name_.c_str());
 
     ft_server_ = std::make_unique<FollowTopicActionServer>(
-      rclcpp_node_,
+      get_node_base_interface(),
+      get_node_clock_interface(),
+      get_node_logging_interface(),
+      get_node_waitables_interface(),
       name_,
       std::bind(&FollowTopic::execute, this));
 
     cc_server_ = std::make_unique<ClearCostmapActionServer>(
-      rclcpp_node_,
+      get_node_base_interface(),
+      get_node_clock_interface(),
+      get_node_logging_interface(),
+      get_node_waitables_interface(),
       name_ + "/clear_costmap",
       std::bind(&FollowTopic::clear_costmap, this));
 
@@ -144,7 +150,7 @@ namespace flex_nav {
       goal_checker_ = goal_checker_loader_.createUniqueInstance(goal_checker_type_);
       RCLCPP_INFO(get_logger(), "Created goal_checker : %s of type %s",
         goal_checker_id_.c_str(), goal_checker_type_.c_str());
-      goal_checker_->initialize(node, goal_checker_id_);
+      goal_checker_->initialize(node, goal_checker_id_, costmap_ros_);
     } catch (const pluginlib::PluginlibException & ex) {
       RCLCPP_FATAL(get_logger(), "Failed to create goal_checker. Exception: %s",
         ex.what());
@@ -203,7 +209,7 @@ namespace flex_nav {
     }
 
     // create bond connection with nav2_util::LifeCycle manager
-    //Galactic createBond();
+    createBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -232,7 +238,7 @@ namespace flex_nav {
     }
 
     // destroy bond connection
-    //Galactic destroyBond();
+    destroyBond();
 
     return nav2_util::CallbackReturn::SUCCESS;
   }
@@ -270,8 +276,7 @@ namespace flex_nav {
 
     auto end_pose = path.poses.back();
     end_pose.header.frame_id = path.header.frame_id;
-    // Galactic rclcpp::Duration tolerance = rclcpp::Duration::from_nanoseconds(costmap_ros_->getTransformTolerance() * 1e9);
-    rclcpp::Duration tolerance(costmap_ros_->getTransformTolerance() * 1e9); // Foxy
+    rclcpp::Duration tolerance = rclcpp::Duration::from_nanoseconds(costmap_ros_->getTransformTolerance() * 1e9);
 
     nav_2d_utils::transformPose(costmap_ros_->getTfBuffer(), costmap_ros_->getGlobalFrameID(),
       end_pose, end_pose, tolerance);
@@ -322,8 +327,8 @@ namespace flex_nav {
     nav_2d_msgs::msg::Twist2D twist = odom_sub_->getTwist();
 
     auto cmd_vel_2d = controller_->computeVelocityCommands(pose,
-                                                           nav_2d_utils::twist2Dto3D(twist)); // Foxy,
-                                                           // Galactic goal_checker_.get());
+                                                           nav_2d_utils::twist2Dto3D(twist),
+                                                           goal_checker_.get());
     publishVelocity(cmd_vel_2d, pose);
   }
 
