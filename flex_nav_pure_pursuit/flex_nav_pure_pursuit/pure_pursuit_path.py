@@ -128,7 +128,7 @@ class PurePursuitPath(PurePursuit):
                 return # Done
 
             # Current robot location in map frame
-            self._location = self.transformMap(self._last_odom_msg)
+            self._location = self.transformFrame(self._last_odom_msg, goal.goal_info.path.header.frame_id)
             if self._failed:
                 self.set_aborted(goal, result)
                 return # Failed to get transform
