@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2023
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -100,7 +100,7 @@ private:
   pluginlib::ClassLoader<nav_core::BaseGlobalPlanner> loader_;
   boost::shared_ptr<nav_core::BaseGlobalPlanner> planner_;
 
-  std::string robot_base_frame_, global_frame_, name_;
+  std::string robot_base_frame_, global_frame_, costmap_name_, name_;
   double planner_frequency_, inscribed_radius_, circumscribed_radius_;
   double planner_patience_, oscillation_timeout_, oscillation_distance_;
 };

@@ -84,10 +84,11 @@ bool getTargetPointFromPath(
     ++i;
   }
 
+  target_point.header          = planned_path[0].header; // assume header is same for all points
   target_point.pose.position.x = planned_path[i - 1].pose.position.x;
   target_point.pose.position.y = planned_path[i - 1].pose.position.y;
   target_point.pose.position.z = planned_path[i - 1].pose.position.z;
-  target_point.pose.orientation = geometry_msgs::Quaternion();//0.0, 0.0, 0.0, 1.0);
+  target_point.pose.orientation = planned_path[i - 1].pose.orientation;
 
   if (i == planned_path.size()) {
     return true;

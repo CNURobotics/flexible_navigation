@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2023
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -60,8 +60,12 @@ FollowPath::FollowPath(tf2_ros::Buffer &tf)
                    std::string("middle_costmap"));
   private_nh.param(costmap_name_ + "/robot_base_frame", robot_base_frame_,
                    std::string("base_link"));
-  private_nh.param(costmap_name_ + "/reference_frame", global_frame_,
-                   std::string("/odom"));
+  private_nh.param(costmap_name_ + "/global_frame", global_frame_,
+                   std::string("odom"));
+  ROS_INFO("[%s] Costmap using  frames %s and %s for %s", name_.c_str(),
+           robot_base_frame_.c_str(), global_frame_.c_str(),
+           planner.c_str());
+
   private_nh.param("planner_frequency", planner_frequency_, 1.0);
   private_nh.param("distance_threshold", distance_threshold_, 5.0);
 
@@ -171,6 +175,7 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
     }
 
     // Convert the goal point from path frame to map frame
+    goal_pose_path.header.stamp = start_pose_map.header.stamp; // update the path stamp as we go
     goal_pose_map.header.stamp = ros::Time();
     goal_pose_map.header.frame_id = global_frame_;
     result.pose = goal_pose_path.pose;
@@ -199,7 +204,7 @@ void FollowPath::execute(const flex_nav_common::FollowPathGoalConstPtr &goal) {
     fp_server_->publishFeedback(feedback);
 
     std::vector<geometry_msgs::PoseStamped> plan;
-    if (planner_->makePlan(goal_pose_map, goal_pose_map, plan)) {
+    if (planner_->makePlan(start_pose_map, goal_pose_map, plan)) {
       if (plan.empty()) {
         ROS_WARN("[%s] Empty path - abort goal!", name_.c_str());
         result.code = flex_nav_common::FollowPathResult::FAILURE; // empty plan

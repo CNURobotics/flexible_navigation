@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2023
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -58,10 +58,13 @@ FollowTopic::FollowTopic(tf2_ros::Buffer &tf)
                    std::string("middle_costmap"));
   private_nh.param(costmap_name_ + "/robot_base_frame", robot_base_frame_,
                    std::string("base_link"));
-  private_nh.param(costmap_name_ + "/reference_frame", global_frame_,
-                   std::string("/odom"));
+  private_nh.param(costmap_name_ + "/global_frame", global_frame_,
+                   std::string("odom"));
   private_nh.param("planner_frequency", planner_frequency_, 1.0);
   private_nh.param("distance_threshold", distance_threshold_, 5.0);
+  ROS_INFO("[%s] Costmap using frames %s and %s for %s", name_.c_str(),
+           robot_base_frame_.c_str(), global_frame_.c_str(),
+           planner.c_str());
 
   costmap_ = new costmap_2d::Costmap2DROS(costmap_name_, tf);
   costmap_->pause();

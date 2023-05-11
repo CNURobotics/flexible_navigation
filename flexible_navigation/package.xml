@@ -1,6 +1,6 @@
 <package>
   <name>flexible_navigation</name>
-  <version>0.2.0</version>
+  <version>0.2.1</version>
   <description>
     Flexible Navigation is a rework of the ROS Navigation stack into independent modules that
     interface with FlexBE (http://wiki.ros.org/flexbe) compatible state implementations.

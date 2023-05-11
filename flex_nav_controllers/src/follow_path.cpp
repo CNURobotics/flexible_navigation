@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016
+ *  Copyright (c) 2016-2023
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -61,6 +61,8 @@ FollowPath::FollowPath(tf2_ros::Buffer &tf)
                    std::string("base_local_planner/TrajectoryPlannerROS"));
   private_nh.param("controller_frequency", controller_frequency_, 5.0);
   private_nh.param("robot_frame", robot_frame_, std::string("base_footprint"));
+  ROS_INFO("[%s] Using frame %s for %s", name_.c_str(),
+           robot_frame_.c_str(), planner.c_str());
 
   vel_pub_ = nh.advertise<geometry_msgs::TwistStamped>("cmd_vel", 1);
 
