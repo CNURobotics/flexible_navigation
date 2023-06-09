@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016-2022
+ *  Copyright (c) 2016-2023
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -33,6 +33,7 @@
  *       POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
+#include <math.h>
 #include <string.h>
 #include <flex_nav_planners/follow_common.h>
 #include <flex_nav_planners/follow_path.h>
@@ -46,6 +47,7 @@ namespace flex_nav {
         default_id_{"GridBased"},
         default_type_{"nav2_navfn_planner/NavfnPlanner"},
         costmap_(nullptr),
+        set_orientation_(false),
         name_("follow_path"),
         running_(false)
         {
@@ -53,7 +55,10 @@ namespace flex_nav {
 
     declare_parameter("planner_plugin", rclcpp::ParameterValue(default_id_));
     declare_parameter("expected_planner_frequency", rclcpp::ParameterValue(1.0));
-    declare_parameter("distance_threshold", rclcpp::ParameterValue(5.0));
+    declare_parameter("lookahead_distance", rclcpp::ParameterValue(5.0));
+    declare_parameter("distance_threshold", rclcpp::ParameterValue(0.5));
+    declare_parameter("set_orientation", rclcpp::ParameterValue(false));
+
     declare_parameter("costmap_name", rclcpp::ParameterValue("middle_costmap"));
     declare_parameter("global_frame", rclcpp::ParameterValue("map"));
 
@@ -92,14 +97,22 @@ namespace flex_nav {
       name_ + "/clear_costmap",
       std::bind(&FollowPath::clear_costmap, this));
 
-    get_parameter("expected_planner_frequency", expected_planner_frequency_);
-    get_parameter("distance_threshold", distance_threshold_);
-
     costmap_ros_->on_configure(state);
     costmap_ = costmap_ros_->getCostmap();
 
     RCLCPP_DEBUG(get_logger(), "Costmap size: %d,%d",
       costmap_->getSizeInCellsX(), costmap_->getSizeInCellsY());
+
+    get_parameter("expected_planner_frequency", expected_planner_frequency_);
+
+    // These parameters are now distance in meters (not related to costmap size)
+    get_parameter("lookahead_distance", lookahead_distance_squared_);
+    get_parameter("distance_threshold", distance_threshold_squared_);
+    get_parameter("set_orientation", set_orientation_);
+    RCLCPP_INFO(get_logger(), "Set orientations = %d", set_orientation_);
+
+    lookahead_distance_squared_ *= lookahead_distance_squared_; // as the name implies!
+    distance_threshold_squared_ *= distance_threshold_squared_; // as the name implies!
 
     tf_ = costmap_ros_->getTfBuffer();
 
@@ -196,7 +209,7 @@ namespace flex_nav {
     std::shared_ptr<flex_nav_common::action::FollowPath::Result> result =
       std::make_shared<flex_nav_common::action::FollowPath::Result>();
 
-    RCLCPP_INFO(get_logger(), " [%s] Received goal", name_.c_str());
+    RCLCPP_INFO(get_logger(), "Received goal");
     if (fp_server_ == nullptr || !fp_server_->is_server_active()) {
       RCLCPP_DEBUG(get_logger(), "Action server unavailable or inactive. Stopping.");
       return;
@@ -209,99 +222,188 @@ namespace flex_nav {
     }
 
     while (running_) {
-      RCLCPP_WARN(get_logger(), "[%s] Waiting for lock", name_.c_str());
+      RCLCPP_WARN(get_logger(), "Waiting for lock");
       r.sleep();
     }
 
     if (goal->path.poses.empty()) {
-      RCLCPP_ERROR(get_logger(), "[%s] The path is empty!", name_.c_str());
-      result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
-      fp_server_->terminate_current(result);
+      RCLCPP_ERROR(get_logger(), "The path is empty! - terminate");
+      terminateCurrentFollower();
       return;
     }
 
     if (goal->path.header.frame_id == "") {
-      RCLCPP_ERROR(get_logger(), "[%s] The frame_id is empty!", name_.c_str());
-      result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
-      fp_server_->terminate_current(result);
+      RCLCPP_ERROR(get_logger(), "The frame_id is empty - terminate!");
+      terminateCurrentFollower();
       return;
     }
 
-    RCLCPP_INFO(get_logger(), " [%s] Ready to process latest goal Preempt Requested(%d)",
-                name_.c_str(),
+    RCLCPP_INFO(get_logger(), "Ready to process latest goal - Cancel requested(%d)",
                 fp_server_->is_cancel_requested());
 
     running_ = true;
-    while (running_ && rclcpp::ok() && !fp_server_->is_cancel_requested()) {
-      geometry_msgs::msg::PoseStamped start_pose;
-      geometry_msgs::msg::PoseStamped goal_pose = goal->path.poses.back();
-      geometry_msgs::msg::PoseStamped goal_pose_map = goal_pose;
 
+    // Get the current robot pose from costmap
+    geometry_msgs::msg::PoseStamped current_pose_map;
+
+    if (!costmap_ros_->getRobotPose(current_pose_map)) {
+      RCLCPP_ERROR(get_logger(), "No valid current pose to start - terminate!");
+      terminateCurrentFollower();
+      return;
+    }
+
+    // Convert the current pose from map to path frame
+    geometry_msgs::msg::PoseStamped current_pose_path;
+    if (goal->path.header.frame_id != current_pose_map.header.frame_id) {
+      // transform current frame to the path frame to get current target
+      if (!transformRobot(get_logger(), *tf_, current_pose_map, current_pose_path, goal->path.header.frame_id)) {
+        RCLCPP_ERROR(get_logger(), "No valid transform from current pose to path frame - terminate!");
+
+        terminateCurrentFollower();
+        return;
+      }
+    } else {
+      current_pose_path = current_pose_map;
+    }
+
+    // Find the starting point along the given path
+    geometry_msgs::msg::PoseStamped goal_pose_path;
+
+    long path_ndx = getTargetPointFromPath(get_logger(), 
+                                           lookahead_distance_squared_, 
+                                           current_pose_path, goal->path.poses, 
+                                           goal_pose_path, 0);
+    if (path_ndx < 0) {
+        RCLCPP_ERROR(get_logger(), "No valid target along path from the current robot pose - terminate!");
+
+        terminateCurrentFollower();
+        return;
+
+    }
+
+    while (running_ && rclcpp::ok() && !fp_server_->is_cancel_requested()) {
+ 
       // Get the current robot pose from costmap
-      if (!costmap_ros_->getRobotPose(start_pose)) {
-        fp_server_->terminate_current();
+      if (!costmap_ros_->getRobotPose(current_pose_map)) {
+        terminateCurrentFollower();
         return;
       }
 
+      // Convert the current pose from map to path frame
+      if (goal->path.header.frame_id != current_pose_map.header.frame_id) {
+        // transform current frame to the path frame to get current target
+        if (!transformRobot(get_logger(), *tf_, current_pose_map, current_pose_path, goal->path.header.frame_id)) {
+          RCLCPP_ERROR(get_logger(), "No valid transform from current pose to path frame - terminate!");
+
+          terminateCurrentFollower();
+          return;
+        }
+      } else {
+        current_pose_path = current_pose_map;
+      }
+
+      // Check to see if we have reached the end of the path
+      if (distanceSquared(current_pose_path, goal->path.poses.back()) <= distance_threshold_squared_) {
+        RCLCPP_INFO(get_logger(), "Reached goal - Success!");
+        result->code = flex_nav_common::action::FollowPath::Result::SUCCESS;
+        fp_server_->succeeded_current(result);
+        running_ = false;
+
+        // Clear path on success
+        nav_msgs::msg::Path path;
+        path.header.stamp = steady_clock_.now();
+        path.header.frame_id = goal->path.header.frame_id;
+        plan_publisher_->publish(std::move(path));
+
+        return;
+      }
+
+
+      path_ndx = getTargetPointFromPath(get_logger(),
+                                        lookahead_distance_squared_, 
+                                        current_pose_path, goal->path.poses, 
+                                        goal_pose_path, path_ndx); // start from prior index, forces progress along path
+      if (path_ndx < 0) {
+          RCLCPP_ERROR(get_logger(), "No valid target along path from the current robot pose - terminate!");
+
+          terminateCurrentFollower();
+          return;
+
+      }
+
+      // frame ids are not always set along path, and need to update the time stamp as we move along so that 
+      // transforms are available
+      goal_pose_path.header.stamp = steady_clock_.now();
+      goal_pose_path.header.frame_id = goal->path.header.frame_id;
+
+      geometry_msgs::msg::PoseStamped goal_pose_map = goal_pose_path;
       // Convert the goal point from path frame to global frame
       if (goal->path.header.frame_id != global_frame_) {
         // goal_pose_map gets the transformed goal pose
-        goal_pose_map.header.stamp = steady_clock_.now();
-        if (!transformRobot(*tf_, goal_pose, goal_pose_map, global_frame_)) {
-          RCLCPP_ERROR(get_logger(), "[%s] No valid transform for the goal point found along path",
-                       name_.c_str());
+        if (!transformRobot(get_logger(), *tf_, goal_pose_path, goal_pose_map, global_frame_)) {
+          RCLCPP_ERROR(get_logger(), "No valid transform for the target point to planner frame found along path - terminate!");
 
-          result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
-          fp_server_->terminate_current(result);
-          running_ = false;
+          terminateCurrentFollower();
           return;
         }
       }
 
-      nav2_costmap_2d::Costmap2D *costmap = costmap_ros_->getCostmap();
-      double threshold = distance_threshold_ * costmap->getResolution();
-      if (distanceSquared(start_pose, goal_pose) <= threshold * threshold) {
-        RCLCPP_INFO(get_logger(), "[%s] Reached goal - Success!", name_.c_str());
-        result->code = flex_nav_common::action::FollowPath::Result::SUCCESS;
-        fp_server_->succeeded_current(result);
-        running_ = false;
-        return;
-      }
-
       // Update the status of robot while following the path
       auto feedback = std::make_shared<FollowPathAction::Feedback>();
-      feedback->pose = goal_pose.pose;
+      feedback->pose = goal_pose_map.pose;
       fp_server_->publish_feedback(feedback);
 
-      nav_msgs::msg::Path path = planner_->createPlan(start_pose, goal_pose_map);
+      nav_msgs::msg::Path path = planner_->createPlan(current_pose_map, goal_pose_map);
       if (!path.poses.empty()) {
+
+        // If using simple 2D planner, set orientations along path based on average change
+        if (set_orientation_) {
+          if (path.poses.size() > 2 && fabs(path.poses[1].pose.orientation.w - 1.0) < 1.e-6) {
+            RCLCPP_DEBUG(get_logger(), "Setting orientations along path");
+            setPathOrientations(path.poses);
+          }
+        }
+
         plan_publisher_->publish(std::move(path));
       }
       else {
-        RCLCPP_WARN(get_logger(), "[%s] Empty path - abort goal!", name_.c_str());
-
-        result->code = flex_nav_common::action::FollowPath::Result::FAILURE; // empty plan
-        fp_server_->terminate_current(result);
-        running_ = false;
+        RCLCPP_WARN(get_logger(), "Empty path - terminate goal!");
+        terminateCurrentFollower();
         return;
       }
 
-      r.sleep();
+      r.sleep(); // until next plan update
     }
 
     if (fp_server_->is_cancel_requested()) {
-      RCLCPP_WARN(get_logger(), "[%s] Preempt requested - preempting goal ...", name_.c_str());
+      RCLCPP_WARN(get_logger(), "Cancel requested - preempting goal ...");
 
       result->code = flex_nav_common::action::FollowPath::Result::CANCEL;
       fp_server_->terminate_current(result);
     }
     else {
-      RCLCPP_ERROR(get_logger(), "[%s] Aborting for unknown reason!", name_.c_str());
-      result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
-      fp_server_->terminate_current(result);
+      RCLCPP_ERROR(get_logger(), "Terminating for unknown reason!");
+      terminateCurrentFollower();
     }
 
     running_ = false;
+  }
+
+
+  void FollowPath::terminateCurrentFollower() 
+  {
+    std::shared_ptr<flex_nav_common::action::FollowPath::Result> result =
+      std::make_shared<flex_nav_common::action::FollowPath::Result>();
+
+    result->code = flex_nav_common::action::FollowPath::Result::FAILURE;
+    fp_server_->terminate_current(result);
+    running_ = false;
+
+    // Clear path on success
+    nav_msgs::msg::Path path;
+    path.header.stamp = steady_clock_.now();
+    plan_publisher_->publish(std::move(path));
+
   }
 
   void FollowPath::clear_costmap() {

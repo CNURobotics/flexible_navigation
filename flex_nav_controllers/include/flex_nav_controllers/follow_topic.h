@@ -141,15 +141,23 @@ private:
   void publishZeroVelocity();
 
   /**
-   * @brief Calculates velocity and publishes to "cmd_vel" topic
+   * @brief Called to terminate action and publish zero velocity
+   * @param pose To store current pose of the robot
    */
-  void computeAndPublishVelocity();
+  void terminateController(const geometry_msgs::msg::PoseStamped & pose);
+
+
+  /**
+   * @brief Calculates velocity and publishes to "cmd_vel" topic
+   * @param pose To store current pose of the robot
+   */
+  void computeAndPublishVelocity(geometry_msgs::msg::PoseStamped & pose);
 
   /**
    * @brief Calls velocity publisher to publish the velocity on "cmd_vel" topic
    * @param velocity Twist velocity to be published
    */
-  void publishVelocity(const geometry_msgs::msg::TwistStamped & velocity, geometry_msgs::msg::PoseStamped robotPose);
+  void publishVelocity(const geometry_msgs::msg::TwistStamped & velocity);
 
   /**
    * @brief Assigns path to controller
@@ -161,7 +169,7 @@ private:
    * @brief Checks if goal is reached
    * @return true or false
    */
-  bool isGoalReached();
+  bool isGoalReached(const geometry_msgs::msg::PoseStamped & pose);
 
   /**
    * @brief Obtain current pose of the robot
@@ -235,8 +243,8 @@ private:
 
   bool running_;
 
-  nav_msgs::msg::Path current_path_;
-  nav_msgs::msg::Path latest_path_;
+  nav_msgs::msg::Path::SharedPtr current_path_ptr_;
+  nav_msgs::msg::Path::SharedPtr latest_path_ptr_;
   geometry_msgs::msg::Pose end_pose_;
 
   std::string name_;

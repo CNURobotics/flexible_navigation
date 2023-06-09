@@ -33,6 +33,7 @@
  *       POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
+#include <flex_nav_planners/follow_common.h>
 #include <flex_nav_planners/get_path.h>
 
 #include <geometry_msgs/msg/twist.h>
@@ -47,6 +48,7 @@ namespace flex_nav {
         default_id_{"GridBased"},
         default_type_{"nav2_navfn_planner/NavfnPlanner"},
         costmap_(nullptr),
+        set_orientation_(false),
         name_("get_path")
         {
 
@@ -54,6 +56,7 @@ namespace flex_nav {
 
     declare_parameter("planner_plugin", rclcpp::ParameterValue(default_id_));
     declare_parameter("expected_planner_frequency", rclcpp::ParameterValue(1.0));
+    declare_parameter("set_orientation", rclcpp::ParameterValue(false));
 
     costmap_ros_ = std::make_shared<nav2_costmap_2d::Costmap2DROS>(
       "global_costmap", std::string{get_namespace()}, "global_costmap");
@@ -97,6 +100,9 @@ namespace flex_nav {
       costmap_->getSizeInCellsX(), costmap_->getSizeInCellsY());
 
     tf_ = costmap_ros_->getTfBuffer();
+
+    get_parameter("set_orientation", set_orientation_);
+    RCLCPP_INFO(get_logger(), "Set orientations = %d", set_orientation_);
 
     RCLCPP_DEBUG(get_logger(), "Configuring %s planner plugin ... ", name_.c_str());
     get_parameter("planner_plugin", planner_id_);
@@ -201,7 +207,7 @@ namespace flex_nav {
   void GetPath::execute() {
     auto goal = gp_server_->get_current_goal();
 
-    RCLCPP_INFO(get_logger(), " [%s] Received goal", name_.c_str());
+    RCLCPP_INFO(get_logger(), "Received goal");
     if (gp_server_ == nullptr || !gp_server_->is_server_active()) {
       RCLCPP_DEBUG(get_logger(), "Action server unavailable or inactive. Stopping.");
       return;
@@ -224,10 +230,10 @@ namespace flex_nav {
       goal = gp_server_->accept_pending_goal();
     }
 
-    RCLCPP_INFO(get_logger(), "[%s] Current location (%f, %f)", name_.c_str(),
+    RCLCPP_INFO(get_logger(), "Current location (%f, %f)",
       start_pose.pose.position.x, start_pose.pose.position.y);
 
-    RCLCPP_INFO(get_logger(), "[%s] Generating a path to (%f, %f), qz=%f", name_.c_str(),
+    RCLCPP_INFO(get_logger(), "Generating a path to (%f, %f), qz=%f",
       goal->pose.pose.position.x, goal->pose.pose.position.y,
       goal->pose.pose.orientation.z);
 
@@ -247,6 +253,13 @@ namespace flex_nav {
         RCLCPP_WARN(get_logger(), "Path frame id is empty");
       }
 
+      // If using simple 2D planner, set orientations along path based on average change
+      if (set_orientation_) {
+        if (path.poses.size() > 2 && fabs(path.poses[1].pose.orientation.w - 1.0) < 1.e-6) {
+          RCLCPP_INFO(get_logger(), "Setting orientations along path");
+          setPathOrientations(path.poses);
+        }
+      }
       result->plan = path;
       result->code = flex_nav_common::action::GetPath::Result::SUCCESS;
       plan_publisher_->publish(std::move(path));

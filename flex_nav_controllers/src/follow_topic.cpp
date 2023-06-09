@@ -55,7 +55,9 @@ namespace flex_nav {
         default_id_{"FollowPath"},
         default_type_{"dwb_core::DWBLocalPlanner"},
         running_(false),
-        name_("follow_topic") {
+        name_("follow_topic"),
+        current_path_ptr_(nullptr),
+        latest_path_ptr_(nullptr) {
     using namespace std::placeholders;
 
     declare_parameter("controller_frequency", rclcpp::ParameterValue(20.0));
@@ -223,6 +225,7 @@ namespace flex_nav {
     cc_server_->deactivate();
     costmap_ros_->on_deactivate(state);
 
+    running_ = false;
     publishZeroVelocity();
 
     if (vel_publisher_name_ != "") {
@@ -312,13 +315,8 @@ namespace flex_nav {
     }
   }
 
-  void FollowTopic::computeAndPublishVelocity()
+  void FollowTopic::computeAndPublishVelocity(geometry_msgs::msg::PoseStamped & pose)
   {
-    geometry_msgs::msg::PoseStamped pose;
-
-    if (!getRobotPose(pose)) {
-      throw nav2_core::PlannerException("Failed to obtain robot pose");
-    }
 
     if (!progress_checker_->check(pose)) {
       throw nav2_core::PlannerException("Failed to make progress");
@@ -329,10 +327,10 @@ namespace flex_nav {
     auto cmd_vel_2d = controller_->computeVelocityCommands(pose,
                                                            nav_2d_utils::twist2Dto3D(twist),
                                                            goal_checker_.get());
-    publishVelocity(cmd_vel_2d, pose);
+    publishVelocity(cmd_vel_2d);
   }
 
-  void FollowTopic::publishVelocity(const geometry_msgs::msg::TwistStamped & velocity, geometry_msgs::msg::PoseStamped robotPose)
+  void FollowTopic::publishVelocity(const geometry_msgs::msg::TwistStamped & velocity)
   {
     auto cmd_vel = std::make_unique<geometry_msgs::msg::Twist>(velocity.twist);
     auto cmd_vel_stamp = std::make_unique<geometry_msgs::msg::TwistStamped>(velocity);
@@ -352,14 +350,8 @@ namespace flex_nav {
     }
   }
 
-  bool FollowTopic::isGoalReached()
+  bool FollowTopic::isGoalReached(const geometry_msgs::msg::PoseStamped & pose)
   {
-    geometry_msgs::msg::PoseStamped pose;
-
-    if (!getRobotPose(pose)) {
-      return false;
-    }
-
     nav_2d_msgs::msg::Twist2D twist = odom_sub_->getTwist();
     geometry_msgs::msg::Twist velocity = nav_2d_utils::twist2Dto3D(twist);
     return goal_checker_->isGoalReached(pose.pose, end_pose_, velocity);
@@ -379,13 +371,9 @@ namespace flex_nav {
     auto goal = ft_server_->get_current_goal();
 
     rclcpp::Rate r(controller_frequency_);
-    geometry_msgs::msg::PoseStamped location;
-    geometry_msgs::msg::PoseStamped pose;
+    geometry_msgs::msg::PoseStamped robot_pose;
     geometry_msgs::msg::Twist cmd_vel;
     geometry_msgs::msg::TwistStamped cur_twist;
-
-    std::shared_ptr<flex_nav_common::action::FollowTopic::Result> result =
-      std::make_shared<flex_nav_common::action::FollowTopic::Result>();
 
     auto feedback = std::make_shared<FollowTopicAction::Feedback>();
 
@@ -394,8 +382,8 @@ namespace flex_nav {
       r.sleep();
     }
 
-    current_path_ = nav_msgs::msg::Path();
-    latest_path_ = nav_msgs::msg::Path();
+    current_path_ptr_ = nullptr;
+    latest_path_ptr_ = nullptr;
 
     RCLCPP_INFO(get_logger(), "[%s] Attempting to listen to topic: %s",
                 name_.c_str(), goal->topic.data.c_str());
@@ -408,7 +396,7 @@ namespace flex_nav {
         rclcpp::SystemDefaultsQoS(),
         std::bind(&FollowTopic::topic_cb, this, std::placeholders::_1));
 
-      RCLCPP_INFO(get_logger(), "[%s] Success!", name_.c_str());
+      RCLCPP_INFO(get_logger(), "[%s] Successfully subscribed to topic %s!", name_.c_str(), goal->topic.data.c_str());
       good = true;
     }
     catch(std::exception& e) {
@@ -418,113 +406,129 @@ namespace flex_nav {
 
     // This is not good
     if (!good) {
-      RCLCPP_ERROR(get_logger(), "[%s] Desired topic does not publish a nav_msgs/Path",
-        name_.c_str());
+      RCLCPP_ERROR(get_logger(), "[%s] Desired topic %s does not publish a nav_msgs/Path",
+        name_.c_str(), goal->topic.data.c_str());
 
-      result->code = flex_nav_common::action::FollowTopic::Result::FAILURE;
-      ft_server_->terminate_current(result);
-      sub_.reset();
-      current_path_ = nav_msgs::msg::Path();
-      latest_path_ = nav_msgs::msg::Path();
+      getRobotPose(robot_pose); // try to get current pose for result data
+      terminateController(robot_pose);
       return;
     }
 
-    // Wait for a path to be received
-    while ((latest_path_.poses.empty()) && rclcpp::ok() && !ft_server_->is_cancel_requested()) {
+    // Wait for the first path to be received
+    while ((!latest_path_ptr_ || latest_path_ptr_->poses.empty()) && rclcpp::ok() && !ft_server_->is_cancel_requested()) {
+      RCLCPP_INFO(get_logger(), "[%s] Waiting for first valid path update ...", name_.c_str());
       r.sleep();
     }
 
-    running_ = true;
-    while (running_ && rclcpp::ok() && !ft_server_->is_cancel_requested()) {
-      current_path_ = latest_path_;
+    progress_checker_->reset(); // always reset on a new action goal 
 
-      if (current_path_.poses.empty()) {
-        RCLCPP_WARN(get_logger(), "Current plan to goal is empty");
+    running_ =  getRobotPose(robot_pose); // we have a valid path and available robot pose;
+    RCLCPP_INFO(get_logger(), "[%s] Starting controller loop with path of %ld points (%d) ...", name_.c_str(), latest_path_ptr_->poses.size(), running_);
+    while (running_ && latest_path_ptr_ && rclcpp::ok() && !ft_server_->is_cancel_requested()) {
 
-        costmap_ros_->getRobotPose(pose);
+      // Grab the latest path and store in local scope to avoid corruption during loop
+      const nav_msgs::msg::Path::SharedPtr path_ptr = latest_path_ptr_;
 
-        // Could not set plan
-        result->code = flex_nav_common::action::FollowTopic::Result::FAILURE;
-        result->pose = location.pose;
-
-        ft_server_->terminate_current(result);
-        sub_.reset();
-        current_path_ = nav_msgs::msg::Path();
-        latest_path_ = nav_msgs::msg::Path();
+      if (path_ptr->poses.empty()) {
+        RCLCPP_WARN(get_logger(), "[%s] Current plan to goal is empty - terminate!", name_.c_str());
+        terminateController(robot_pose);
         return;
       }
 
+      // check the latest desired path vs. active current path for significant changes
+      if (current_path_ptr_ && ((path_ptr->poses.size() != current_path_ptr_->poses.size()) || 
+                                (path_ptr->poses.back() != current_path_ptr_->poses.back()))) {
+          // reset progress checker only on significant changes as mid-level periodically republishes without significant changes
+          progress_checker_->reset();
+      }
+
+      current_path_ptr_ = path_ptr; // store the current path to follow in worker loop
+
       // Send the goal to the planner
-      setPlannerPath(current_path_);
-      progress_checker_->reset();
+      setPlannerPath(*current_path_ptr_);
 
-      // This is where the actual work gets done
-      while(current_path_.header.stamp == latest_path_.header.stamp && running_ &&
-        rclcpp::ok() && !ft_server_->is_cancel_requested()) {
+      // This is where the actual work gets done until we detect a new path available
+      while(running_ && rclcpp::ok() && !ft_server_->is_cancel_requested() && 
+            current_path_ptr_->header.stamp == latest_path_ptr_->header.stamp  ) {
 
-          RCLCPP_DEBUG(get_logger(), "[%s] Generating path from path", name_.c_str());
+          RCLCPP_DEBUG(get_logger(), "[%s] Following path from path", name_.c_str());
 
-          if (isGoalReached()) {
-            RCLCPP_INFO(get_logger(), "Reached goal - Success!");
+          if (!getRobotPose(robot_pose)) { 
+              // failed to get current robot pose
+              RCLCPP_INFO(get_logger(), "[%s] Failed to get current robot pose - terminate!", name_.c_str());
+              terminateController(robot_pose); // using last know pose (which was valid if running)
+              return;
+          }
+
+          if (isGoalReached(robot_pose)) {
+            RCLCPP_INFO(get_logger(), "[%s] Reached goal - Success - stopping!", name_.c_str());
             publishZeroVelocity();
 
+            std::shared_ptr<flex_nav_common::action::FollowTopic::Result> result =
+              std::make_shared<flex_nav_common::action::FollowTopic::Result>();
+
             result->code = flex_nav_common::action::FollowTopic::Result::SUCCESS;
-            result->pose = location.pose;
+            result->pose = robot_pose.pose;
 
             ft_server_->succeeded_current(result);
             sub_.reset();
-            current_path_ = nav_msgs::msg::Path();
-            latest_path_ = nav_msgs::msg::Path();
             running_ = false;
+            current_path_ptr_ = nullptr;
+            latest_path_ptr_ = nullptr;
             return;
           }
 
           try {
-            computeAndPublishVelocity();
+            computeAndPublishVelocity(robot_pose);
 
-            feedback->path = current_path_;
-            feedback->pose = location.pose;
+            feedback->path = *current_path_ptr_;
+            feedback->pose = robot_pose.pose;
             ft_server_->publish_feedback(feedback);
           }
           catch (std::exception& e) {
-            RCLCPP_ERROR(get_logger(), "[%s] Failed to get a plan from the local planner",
+            RCLCPP_ERROR(get_logger(), "[%s] Failed to get a plan from the local controller - terminate!",
               name_.c_str());
 
-            result->code = flex_nav_common::action::FollowTopic::Result::FAILURE; // Planner failed
-            result->pose = location.pose;
-
-            ft_server_->terminate_current(result);
-            sub_.reset();
-            current_path_ = nav_msgs::msg::Path();
-            latest_path_ = nav_msgs::msg::Path();
-            running_ = false;
-            publishZeroVelocity();
+            terminateController(robot_pose); // using last know pose (which was valid if running)
             return;
           }
 
           r.sleep();
-      }
-      r.sleep();
-    }
+      } // end of worker loop for same timestamp following
+    } // end of worker loop for new path messages
 
     publishZeroVelocity();
-    costmap_ros_->getRobotPose(pose);
 
-    if (ft_server_->is_cancel_requested()) {
-      RCLCPP_WARN(get_logger(), "[%s] Canceling goal...", name_.c_str());
+    if (running_ && ft_server_->is_cancel_requested()) {
+      RCLCPP_WARN(get_logger(), "[%s] Canceling follwer goal ...", name_.c_str());
+      std::shared_ptr<flex_nav_common::action::FollowTopic::Result> result =
+        std::make_shared<flex_nav_common::action::FollowTopic::Result>();
+
       result->code = flex_nav_common::action::FollowTopic::Result::CANCEL;
-      result->pose = location.pose;
+      result->pose = robot_pose.pose;
       ft_server_->terminate_current(result);
-    } else {
-      result->code = flex_nav_common::action::FollowTopic::Result::SUCCESS;
-      result->pose = location.pose;
-      ft_server_->succeeded_current(result);
-    }
+    } 
 
-    running_ = false;
+    RCLCPP_WARN(get_logger(), "[%s] Unplanned controller exit - terminate follower!", name_.c_str());
+    terminateController(robot_pose);
+    
+  }
+
+  void FollowTopic::terminateController(const geometry_msgs::msg::PoseStamped & pose) 
+  {
+    publishZeroVelocity();
+    std::shared_ptr<flex_nav_common::action::FollowTopic::Result> result =
+      std::make_shared<flex_nav_common::action::FollowTopic::Result>();
+
+    result->code = flex_nav_common::action::FollowTopic::Result::FAILURE; // Planner failed
+    result->pose = pose.pose;
+
+    ft_server_->terminate_current(result);
     sub_.reset();
-    current_path_ = nav_msgs::msg::Path();
-    latest_path_ = nav_msgs::msg::Path();
+    current_path_ptr_ = nullptr;
+    latest_path_ptr_ = nullptr;
+    running_ = false;
+    publishZeroVelocity();
   }
 
   void FollowTopic::topic_cb(const nav_msgs::msg::Path::SharedPtr data) {
@@ -532,7 +536,7 @@ namespace flex_nav {
       name_.c_str(),
       data->poses.size());
 
-    latest_path_ = *data;
+    latest_path_ptr_ = data;
   }
 
   void FollowTopic::clear_costmap() {

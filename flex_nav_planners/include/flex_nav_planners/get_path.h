@@ -1,5 +1,5 @@
 /*******************************************************************************
- *  Copyright (c) 2016-2022
+ *  Copyright (c) 2016-2023
  *  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
  *  Christopher Newport University
  *
@@ -126,7 +126,8 @@ protected:
   std::string planner_id_;
   std::string planner_type_;
   double max_planner_duration_;
-
+  bool set_orientation_;
+  
   // Clock
   rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
 

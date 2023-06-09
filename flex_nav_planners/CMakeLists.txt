@@ -61,6 +61,7 @@ ament_target_dependencies(${PROJECT_NAME}_follow_topic_node
 add_executable(${PROJECT_NAME}_get_path_node
 	src/get_path_node.cpp
 	src/get_path.cpp
+	src/follow_common.cpp
 )
 
 ament_target_dependencies(${PROJECT_NAME}_get_path_node
