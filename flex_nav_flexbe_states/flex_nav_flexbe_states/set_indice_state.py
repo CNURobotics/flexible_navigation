@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -37,9 +37,10 @@
 
 from flexbe_core import EventState
 
+
 class SetIndiceState(EventState):
     """
-    Sets the initial index into a planned path for the Pure Pursuit state
+    Set the initial index into a planned path for the Pure Pursuit state.
 
     ># plan         Path       The path.
 
@@ -51,15 +52,8 @@ class SetIndiceState(EventState):
     """
 
     def __init__(self):
-        """
-        Constructor
-        """
-        super(SetIndiceState, self).__init__(outcomes=['done'], input_keys=['plan'], output_keys=['plan', 'indice'])
+        super().__init__(outcomes=['done'], input_keys=['plan'], output_keys=['plan', 'indice'])
 
     def execute(self, userdata):
-        """
-        Execute this state
-        """
-
         userdata.indice = 1
         return 'done'

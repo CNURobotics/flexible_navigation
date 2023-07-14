@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2017
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -41,9 +41,10 @@ from flexbe_core.proxy import ProxySubscriberCached
 
 from geometry_msgs.msg import PoseStamped
 
+
 class GetPoseState(EventState):
     """
-    Grabs the most recent published PoseStamped.
+    Grab the most recent published PoseStamped.
 
     -- topic    String           The topic to subscribe to
 
@@ -53,14 +54,13 @@ class GetPoseState(EventState):
 
     """
 
-    def __init__(self, topic = 'move_base_simple/goal'):
-        """Constructor"""
-        super(GetPoseState, self).__init__(outcomes=['done'], output_keys=['goal'])
+    def __init__(self, topic='flex_nav_global/goal'):
+        super().__init__(outcomes=['done'], output_keys=['goal'])
 
-        ProxySubscriberCached._initialize(GetPoseState._node)
+        ProxySubscriberCached.initialize(GetPoseState._node)
 
         self._topic = topic
-        self._sub = ProxySubscriberCached({self._topic: PoseStamped}, id=id(self))
+        self._sub = ProxySubscriberCached({self._topic: PoseStamped}, inst_id=id(self))
         self._goal_pose = None
 
     def execute(self, userdata):

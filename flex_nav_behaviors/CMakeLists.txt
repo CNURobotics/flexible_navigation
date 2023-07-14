@@ -30,27 +30,27 @@ set(dependencies
 )
 
 include_directories(
-	include
+    include
 )
 
 # flex_planner_follow_path node
 add_executable(${PROJECT_NAME}_behavior_server_node
-	src/behavior_server_node.cpp
-	src/behavior_server.cpp
+    src/behavior_server_node.cpp
+    src/behavior_server.cpp
 )
 ament_target_dependencies(${PROJECT_NAME}_behavior_server_node
-	${dependencies})
+    ${dependencies})
 
 install(
-	TARGETS
-		${PROJECT_NAME}_behavior_server_node
-		RUNTIME DESTINATION lib/${PROJECT_NAME}
+    TARGETS
+        ${PROJECT_NAME}_behavior_server_node
+        RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 # Mark cpp header files for installation
 install(DIRECTORY include/${PROJECT_NAME}/
-	DESTINATION include//${PROJECT_NAME}
-	FILES_MATCHING PATTERN "*.h"
+    DESTINATION include//${PROJECT_NAME}
+    FILES_MATCHING PATTERN "*.h"
 )
 
 ament_package()

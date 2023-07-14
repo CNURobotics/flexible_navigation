@@ -28,37 +28,37 @@ set(dependencies
 )
 
 include_directories(
-	include
+    include
 )
 
 # flex_controller_follow_path node
 add_executable(${PROJECT_NAME}_follow_path_node
-	src/follow_path_node.cpp
-	src/follow_path.cpp
+    src/follow_path_node.cpp
+    src/follow_path.cpp
 )
 ament_target_dependencies(${PROJECT_NAME}_follow_path_node
-	${dependencies})
+    ${dependencies})
 
 # flex_controller_follow_topic node
 add_executable(${PROJECT_NAME}_follow_topic_node
-	src/follow_topic_node.cpp
-	src/follow_topic.cpp
+    src/follow_topic_node.cpp
+    src/follow_topic.cpp
 )
 
 ament_target_dependencies(${PROJECT_NAME}_follow_topic_node
-	${dependencies})
+    ${dependencies})
 
 install(
-	TARGETS
-		${PROJECT_NAME}_follow_path_node
-		${PROJECT_NAME}_follow_topic_node
-	RUNTIME DESTINATION lib/${PROJECT_NAME}
+    TARGETS
+        ${PROJECT_NAME}_follow_path_node
+        ${PROJECT_NAME}_follow_topic_node
+    RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 # Mark cpp header files for installation
 install(DIRECTORY include/${PROJECT_NAME}/
-	DESTINATION include/${PROJECT_NAME}
-	FILES_MATCHING PATTERN "*.h"
+    DESTINATION include/${PROJECT_NAME}
+    FILES_MATCHING PATTERN "*.h"
 )
 
 ament_package()

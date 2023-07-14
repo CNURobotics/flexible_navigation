@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -37,9 +37,10 @@
 
 from flexbe_core import EventState, Logger
 
+
 class LogPathState(EventState):
     """
-    Prints out all the points in a path
+    Print out all the points in a path.
 
     ># plan         Path         The path.
 
@@ -50,31 +51,24 @@ class LogPathState(EventState):
     """
 
     def __init__(self):
-        """
-        Constructor
-        """
-        super(LogPathState, self).__init__(outcomes=['done'], input_keys=['plan'], output_keys=['plan'])
+        super().__init__(outcomes=['done'], input_keys=['plan'], output_keys=['plan'])
 
         self._return = None
 
     def execute(self, userdata):
-        """
-        Execute this state
-        """
-
         if (self._return is None):
             # Only log once in case the state is blocked by low autonomy
+            Logger.loginfo(20 * '-')
             Logger.loginfo('Dumping path points')
-            Logger.loginfo('')
 
             for index in range(len(userdata.plan.poses)):
                 point = userdata.plan.poses[index].pose.position
                 Logger.loginfo('#%i - (%f, %f, %f)' % (index, point.x, point.y, point.z))
 
-            Logger.loginfo('')
+            Logger.loginfo(20 * '-')
             self._return = 'done'
 
         return 'done'
 
-    def on_enter(self,userdata):
-        self._return = None # Clear the completion flag
+    def on_enter(self, userdata):
+        self._return = None  # Clear the completion flag

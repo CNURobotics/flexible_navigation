@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2022
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -35,7 +35,6 @@
 #       POSSIBILITY OF SUCH DAMAGE.
 ###############################################################################
 
-import rclpy
 from rclpy.duration import Duration
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
@@ -47,8 +46,9 @@ from nav_msgs.msg import Odometry
 
 
 class TimedStopState(EventState):
-    '''
+    """
     This state publishes a constant zero Twist and/or TwistStamped command based on parameters.
+
     The state monitors the robot odometry message and returns a failed outcome
     if speed is not near zero within the timeout
 
@@ -58,14 +58,14 @@ class TimedStopState(EventState):
     -- cmd_topic_stamped    string    optional topic name of the robot stamped velocity command (default: '')
     <= done         Robot stopped within the specified time.
     <= failed       The robot is still moving according to the odometry message after timeout.
-    '''
+    """
 
     def __init__(self, timeout=0.25, cmd_topic='cmd_vel', odom_topic='odom', cmd_topic_stamped=""):
         # Declare outcomes, input_keys, and output_keys by calling the super constructor with the corresponding arguments.
-        super(TimedStopState, self).__init__(outcomes = ['done', 'failed'])
+        super().__init__(outcomes=['done', 'failed'])
 
-        ProxyPublisher._initialize(TimedStopState._node)
-        ProxySubscriberCached._initialize(TimedStopState._node)
+        ProxyPublisher.initialize(TimedStopState._node)
+        ProxySubscriberCached.initialize(TimedStopState._node)
 
         # Store state parameter for later use.
         self._timeout = Duration(seconds=timeout)
@@ -74,25 +74,25 @@ class TimedStopState(EventState):
         # Thus, we cannot save the starting time now and will do so later.
         self._start_time = None
 
-        self._done = None # Track the outcome so we can detect if transition is blocked
+        self._done = None  # Track the outcome so we can detect if transition is blocked
 
         self._odom_topic = odom_topic
-        self._odom_sub = ProxySubscriberCached({self._odom_topic: Odometry}, id=id(self))
+        self._odom_sub = ProxySubscriberCached({self._odom_topic: Odometry}, inst_id=id(self))
 
         self._pub = ProxyPublisher()
         self._twist = Twist()
         if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
             self._cmd_topic = cmd_topic
-            self._pub.createPublisher( cmd_topic, Twist)
+            self._pub.createPublisher(cmd_topic, Twist)
         else:
             self._cmd_topic = None
 
         if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
-            self._twist_stamped  = TwistStamped()
+            self._twist_stamped = TwistStamped()
             self._cmd_topic_stamped = cmd_topic_stamped
-            self._pub.createPublisher( cmd_topic_stamped, TwistStamped)
+            self._pub.createPublisher(cmd_topic_stamped, TwistStamped)
         else:
-            self._twist_stamped  = None
+            self._twist_stamped = None
             self._cmd_topic_stamped = None
 
         if self._cmd_topic is None and self._cmd_topic_stamped is None:
@@ -119,16 +119,18 @@ class TimedStopState(EventState):
 
             return self._done
 
-
         if self._node.get_clock().now().nanoseconds - self._start_time.nanoseconds > self._timeout.nanoseconds:
             # Normal completion, verify stoppage
             if (self._sub.has_msg(self._odom_topic)):
                 odom = self._sub.get_last_msg(self._odom_topic)
-                speed = odom.twist.twist.linear.x*odom.twist.twist.linear.x + odom.twist.twist.angular.z*odom.twist.twist.angular.z
+                speed = (odom.twist.twist.linear.x * odom.twist.twist.linear.x
+                         + odom.twist.twist.linear.y * odom.twist.twist.linear.y
+                         + odom.twist.twist.angular.z * odom.twist.twist.angular.z)
                 if (speed > 5.0e-4):
-                    Logger.logwarn('Timed Stop failed - current twist: linear = %f,%f,%f angular=%f, %f, %f' %
-                        (odom.twist.twist.linear.x,  odom.twist.twist.linear.y,  odom.twist.twist.linear.z,
-                         odom.twist.twist.angular.x, odom.twist.twist.angular.y, odom.twist.twist.angular.z))
+                    Logger.logwarn('Timed Stop failed - current twist: linear = %f,%f,%f angular=%f, %f, %f from t=%s'
+                                   % (odom.twist.twist.linear.x, odom.twist.twist.linear.y, odom.twist.twist.linear.z,
+                                      odom.twist.twist.angular.x, odom.twist.twist.angular.y, odom.twist.twist.angular.z,
+                                      str(odom.header.stamp)))
                     self._done = 'failed'
                     return 'failed'
                 else:
@@ -138,7 +140,6 @@ class TimedStopState(EventState):
                 Logger.logwarn('Timed Stop failed - no odometry feedback!')
                 self._done = 'failed'
                 return 'failed'
-
 
         # Normal operation publish the zero twist
         if self._cmd_topic:
@@ -160,4 +161,4 @@ class TimedStopState(EventState):
             self._pub.publish(self._cmd_topic_stamped, self._twist_stamped)
 
         self._start_time = self._node.get_clock().now()
-        self._done       = None # reset the completion flag
+        self._done       = None  # reset the completion flag

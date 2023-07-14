@@ -40,9 +40,10 @@ from flexbe_core import EventState, Logger
 
 from geometry_msgs.msg import PoseStamped
 
+
 class SetPoseState(EventState):
     """
-    Sets a goal pose in userdata
+    Set a goal pose in userdata.
 
     -- position   float[]    position data ([x, y] or [x, y, z])
     -- angle      float      optional rotation about z-axis angle (radians)
@@ -56,16 +57,16 @@ class SetPoseState(EventState):
     """
 
     def __init__(self, position, angle=None, quaternion=None, frame_id='map'):
-        """Constructor"""
-        super(SetPoseState, self).__init__(outcomes=['done'], output_keys=['goal'])
+        """Construct state."""
+        super().__init__(outcomes=['done'], output_keys=['goal'])
 
         self._goal_pose = PoseStamped()
         self._goal_pose.header.frame_id = frame_id
-        self._goal_pose.pose.position.x = float(position[0]) # x is required
-        self._goal_pose.pose.position.y = float(position[1]) # y is required
+        self._goal_pose.pose.position.x = float(position[0])  # x is required
+        self._goal_pose.pose.position.y = float(position[1])  # y is required
         try:
-            self._goal_pose.pose.position.z = float(position[2]) # y is required
-        except:
+            self._goal_pose.pose.position.z = float(position[2])  # z is optional
+        except Exception:  # pylint: disable=W0703
             pass
 
         # orientation is optional
@@ -73,21 +74,20 @@ class SetPoseState(EventState):
             angle = float(angle)
             self._goal_pose.pose.orientation.x = 0.
             self._goal_pose.pose.orientation.y = 0.
-            self._goal_pose.pose.orientation.z = math.sin(angle/2.0)
-            self._goal_pose.pose.orientation.w = math.cos(angle/2.0)
+            self._goal_pose.pose.orientation.z = math.sin(angle / 2.0)
+            self._goal_pose.pose.orientation.w = math.cos(angle / 2.0)
         elif quaternion is not None:
             # Use of quaternion requires 4 floating point values
-            self._goal_pose.pose.orientation.x = float(quaternion[0]) # x is required
-            self._goal_pose.pose.orientation.y = float(quaternion[1]) # y is required
-            self._goal_pose.pose.orientation.z = float(quaternion[2]) # z is required
-            self._goal_pose.pose.orientation.w = float(quaternion[3]) # w is required
+            self._goal_pose.pose.orientation.x = float(quaternion[0])  # x is required
+            self._goal_pose.pose.orientation.y = float(quaternion[1])  # y is required
+            self._goal_pose.pose.orientation.z = float(quaternion[2])  # z is required
+            self._goal_pose.pose.orientation.w = float(quaternion[3])  # w is required
 
     def execute(self, userdata):
-
         if self._goal_pose is not None:
             self._goal_pose.header.stamp = self._node.get_clock().now().to_msg()
             userdata.goal = self._goal_pose
             return 'done'
 
     def on_enter(self, userdata):
-        Logger.loghint(f'{self.name}  Set new Nav goal @ ({self._goal_pose.pose.position})' )
+        Logger.loghint(f'{self.name}  Set new Nav goal @ ({self._goal_pose.pose.position})')

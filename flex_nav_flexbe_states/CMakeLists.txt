@@ -6,13 +6,13 @@ find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 
-INSTALL(DIRECTORY
+install(DIRECTORY
     launch
     DESTINATION share/${PROJECT_NAME}
 )
 
-INSTALL(DIRECTORY
-    test
+install(DIRECTORY
+    tests
     DESTINATION share/${PROJECT_NAME}
 )
 

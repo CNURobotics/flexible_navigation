@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2022
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -42,10 +42,11 @@ from flexbe_core import EventState, Logger
 
 from flexbe_core.proxy import ProxyActionClient
 
-class RecoveryState(EventState):
 
-    '''
-    Sends an action goal to a recovery action server
+class RecoveryState(EventState):
+    """
+    Send an action goal to a recovery action server.
+
     -- module_name       string      the name of package where the recovery action is defined
     -- class_name        string      the name of the action
     -- goal_data         dictionary  Data to create populate the action goal's fields
@@ -53,10 +54,10 @@ class RecoveryState(EventState):
     -- timeout           int         time in seconds to wait for a response from the action server
     <= done                          Given time has passed.
     <= failed                        Timeout waiting for a response from the action server
-    '''
+    """
 
     def __init__(self, module_name, class_name, goal_data, topic, timeout):
-        super(RecoveryState, self).__init__(outcomes = ['done', 'failed'])
+        super().__init__(outcomes=['done', 'failed'])
 
         module = importlib.import_module(module_name)
         self.action_class = getattr(module, class_name)
@@ -68,31 +69,33 @@ class RecoveryState(EventState):
         self._topic = topic
         self._timeout = timeout
         self._return  = None
-        ProxyActionClient._initialize(RecoveryState._node)
+        ProxyActionClient.initialize(RecoveryState._node)
 
         self._client = ProxyActionClient({self._topic: self.action_class})
 
     def execute(self, userdata):
+        if self._return is not None:
+            return self._return
+
         elapsed = self._node.get_clock().now() - self._start_time
 
         if self._client.has_result(self._topic) and elapsed.nanoseconds * 1e-9 > self._timeout:
             self._return = 'done'
 
         if self._return is None and elapsed.nanoseconds * 1e-9 > self._timeout:
-            Logger.logwarn('Timeout waiting to receive result from recovery action server' )
+            Logger.logwarn('Timeout waiting to receive result from recovery action server')
             self._return = 'failed'
-            return 'failed'
 
         # Waiting on action results
         return self._return
 
     def on_enter(self, userdata):
-        #upon entering the state the robot will send the action goal
+        # upon entering the state the robot will send the action goal
         self._return  = None
 
         try:
             self._client.send_goal(self._topic, self.goal)
-        except Exception as e:
+        except Exception:  # pylint: disable=W0703
             Logger.logwarn("Unable to send recovery goal with topic %s" % (self._topic))
             self._return = 'failed'
 
@@ -106,25 +109,18 @@ class RecoveryState(EventState):
             Logger.logerr('%s  Canceling active goal' % (self.name))
             self._client.cancel(self._topic)
 
-
     def on_stop(self):
-        """
-        Will be executed once when the behavior stops or is preempted.
-        """
         if self._topic in ProxyActionClient._result:
             ProxyActionClient._result[self._topic] = None
 
         if self._client.is_active(self._topic):
-            Logger.logerr('%s   Canceling active goal on SM stop'% (self.name))
+            Logger.logerr('%s   Canceling active goal on SM stop' % (self.name))
             self._client.cancel(self._topic)
 
     def on_pause(self):
-        """
-        Will be executed each time this state is paused.
-        """
         if self._topic in ProxyActionClient._result:
             ProxyActionClient._result[self._topic] = None
 
         if self._client.is_active(self._topic):
-            Logger.logerr('%s   Canceling active goal on SM pause'% (self.name))
+            Logger.logerr('%s   Canceling active goal on SM pause' % (self.name))
             self._client.cancel(self._topic)

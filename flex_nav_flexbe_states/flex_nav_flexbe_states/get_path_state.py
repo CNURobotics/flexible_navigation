@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2017
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -38,11 +38,12 @@
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyActionClient
 
-from flex_nav_common.action import *
+from flex_nav_common.action import GetPath
+
 
 class GetPathState(EventState):
     """
-    Creates a plan to reach the desired goal point.
+    Create a plan to reach the desired goal point.
 
     -- planner_topic    String          The planner talk to
 
@@ -57,22 +58,15 @@ class GetPathState(EventState):
     """
 
     def __init__(self, planner_topic):
-        """
-        Constructor
-        """
-        super(GetPathState, self).__init__(outcomes=['planned', 'empty', 'failed'], input_keys=['goal'], output_keys=['plan'])
+        super().__init__(outcomes=['planned', 'empty', 'failed'], input_keys=['goal'], output_keys=['plan'])
 
-        ProxyActionClient._initialize(GetPathState._node)
+        ProxyActionClient.initialize(GetPathState._node)
 
         self._action_topic = planner_topic
         self._client = ProxyActionClient({self._action_topic: GetPath})
         self._return = None
 
     def execute(self, userdata):
-        """
-        Execute this state
-        """
-
         if self._client.has_result(self._action_topic):
             result = self._client.get_result(self._action_topic)
 
@@ -104,10 +98,8 @@ class GetPathState(EventState):
         return self._return
 
     def on_enter(self, userdata):
-        """Upon entering the state, send the footstep plan request."""
-
         self._return = None
-        result = GetPath.Goal(pose = userdata.goal)
+        result = GetPath.Goal(pose=userdata.goal)
 
         try:
             Logger.loginfo('%s    Requesting a plan' % (self.name))
@@ -122,5 +114,5 @@ class GetPathState(EventState):
             ProxyActionClient._result[self._action_topic] = None
 
         if self._client.is_active(self._action_topic):
-            Logger.logerr('%s    Canceling active goal' % (self.name) )
+            Logger.logerr('%s    Canceling active goal' % (self.name))
             self._client.cancel(self._action_topic)

@@ -1,0 +1,6 @@
+[flake8]
+exclude = .git
+max-line-length = 130
+ignore = E221,W503
+# For W503 - https://www.flake8rules.com/rules/W503.html and https://peps.python.org/pep-0008/#should-a-line-break-before-or-after-a-binary-operator
+

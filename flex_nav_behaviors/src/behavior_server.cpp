@@ -15,12 +15,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License. Reserved.
 
+#include "flex_nav_behaviors/behavior_server.hpp"
+
 #include <memory>
 #include <string>
-#include <vector>
 #include <utility>
+#include <vector>
+
 #include "nav2_util/node_utils.hpp"
-#include "flex_nav_behaviors/behavior_server.hpp"
 
 namespace flex_nav_behavior_server
 {
@@ -29,17 +31,14 @@ BehaviorServer::BehaviorServer(const rclcpp::NodeOptions & options)
 : nav2_util::LifecycleNode("behaviors_server", "", options),
   plugin_loader_("nav2_core", "nav2_core::Behavior"),
   default_ids_{"spin", "backup", "drive_on_heading", "wait"},
-  default_types_{"nav2_behaviors/Spin",
-                 "nav2_behaviors/BackUp",
-                 "nav2_behaviors/DriveOnHeading",
-                 "nav2_behaviors/Wait"}
+  default_types_{
+    "nav2_behaviors/Spin", "nav2_behaviors/BackUp", "nav2_behaviors/DriveOnHeading",
+    "nav2_behaviors/Wait"}
 {
   declare_parameter(
-    "costmap_topic",
-    rclcpp::ParameterValue(std::string("local_costmap/costmap_raw")));
+    "costmap_topic", rclcpp::ParameterValue(std::string("local_costmap/costmap_raw")));
   declare_parameter(
-    "footprint_topic",
-    rclcpp::ParameterValue(std::string("local_costmap/published_footprint")));
+    "footprint_topic", rclcpp::ParameterValue(std::string("local_costmap/published_footprint")));
   declare_parameter("cycle_frequency", rclcpp::ParameterValue(10.0));
   declare_parameter("behavior_plugins", default_ids_);
 
@@ -54,34 +53,21 @@ BehaviorServer::BehaviorServer(const rclcpp::NodeOptions & options)
   get_parameter("use_sim_time", use_sim_time);
   RCLCPP_INFO(get_logger(), "Using simulation time %d", use_sim_time);
 
-
-  declare_parameter(
-    "global_frame",
-    rclcpp::ParameterValue(std::string("odom")));
-  declare_parameter(
-    "robot_base_frame",
-    rclcpp::ParameterValue(std::string("base_link")));
-  declare_parameter(
-    "transform_tolerance",
-    rclcpp::ParameterValue(0.1));
+  declare_parameter("global_frame", rclcpp::ParameterValue(std::string("odom")));
+  declare_parameter("robot_base_frame", rclcpp::ParameterValue(std::string("base_link")));
+  declare_parameter("transform_tolerance", rclcpp::ParameterValue(0.1));
 }
 
+BehaviorServer::~BehaviorServer() { behaviors_.clear(); }
 
-BehaviorServer::~BehaviorServer()
-{
-  behaviors_.clear();
-}
-
-nav2_util::CallbackReturn
-BehaviorServer::on_configure(const rclcpp_lifecycle::State & /*state*/)
+nav2_util::CallbackReturn BehaviorServer::on_configure(const rclcpp_lifecycle::State & /*state*/)
 {
   name_ = this->get_name();
   RCLCPP_INFO(get_logger(), "Configuring %s", name_.c_str());
 
   tf_ = std::make_shared<tf2_ros::Buffer>(get_clock());
   auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-    get_node_base_interface(),
-    get_node_timers_interface());
+    get_node_base_interface(), get_node_timers_interface());
   tf_->setCreateTimerInterface(timer_interface);
   transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_);
 
@@ -92,12 +78,12 @@ BehaviorServer::on_configure(const rclcpp_lifecycle::State & /*state*/)
   this->get_parameter("transform_tolerance", transform_tolerance_);
   this->get_parameter("global_frame", global_frame);
   this->get_parameter("robot_base_frame", robot_base_frame);
-  costmap_sub_ = std::make_unique<nav2_costmap_2d::CostmapSubscriber>(
-    shared_from_this(), costmap_topic);
+  costmap_sub_ =
+    std::make_unique<nav2_costmap_2d::CostmapSubscriber>(shared_from_this(), costmap_topic);
   footprint_sub_ = std::make_unique<nav2_costmap_2d::FootprintSubscriber>(
     shared_from_this(), footprint_topic, *tf_, robot_base_frame, transform_tolerance_);
 
-  //collision_checker_ = std::make_shared<nav2_costmap_2d::CostmapTopicCollisionChecker>(
+  // collision_checker_ = std::make_shared<nav2_costmap_2d::CostmapTopicCollisionChecker>(
   //  *costmap_sub_, *footprint_sub_, *tf_, this->get_name());
   //  //,    global_frame, robot_base_frame, transform_tolerance_);
   collision_checker_ = std::make_shared<nav2_costmap_2d::CostmapTopicCollisionChecker>(
@@ -111,9 +97,7 @@ BehaviorServer::on_configure(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-
-bool
-BehaviorServer::loadBehaviorPlugins()
+bool BehaviorServer::loadBehaviorPlugins()
 {
   auto node = shared_from_this();
 
@@ -121,15 +105,16 @@ BehaviorServer::loadBehaviorPlugins()
     behavior_types_[i] = nav2_util::get_plugin_type_param(node, behavior_ids_[i]);
     try {
       RCLCPP_INFO(
-        get_logger(), "Creating behavior plugin %s of type %s",
-        behavior_ids_[i].c_str(), behavior_types_[i].c_str());
+        get_logger(), "Creating behavior plugin %s of type %s", behavior_ids_[i].c_str(),
+        behavior_types_[i].c_str());
       behaviors_.push_back(plugin_loader_.createUniqueInstance(behavior_types_[i]));
       behaviors_.back()->configure(node, behavior_ids_[i], tf_, collision_checker_);
     } catch (const pluginlib::PluginlibException & ex) {
       RCLCPP_FATAL(
-        get_logger(), "Failed to create behavior %s of type %s."
-        " Exception: %s", behavior_ids_[i].c_str(), behavior_types_[i].c_str(),
-        ex.what());
+        get_logger(),
+        "Failed to create behavior %s of type %s."
+        " Exception: %s",
+        behavior_ids_[i].c_str(), behavior_types_[i].c_str(), ex.what());
       return false;
     }
   }
@@ -137,8 +122,7 @@ BehaviorServer::loadBehaviorPlugins()
   return true;
 }
 
-nav2_util::CallbackReturn
-BehaviorServer::on_activate(const rclcpp_lifecycle::State & /*state*/)
+nav2_util::CallbackReturn BehaviorServer::on_activate(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(get_logger(), "Activating %s", name_.c_str());
   std::vector<pluginlib::UniquePtr<nav2_core::Behavior>>::iterator iter;
@@ -152,8 +136,7 @@ BehaviorServer::on_activate(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-BehaviorServer::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
+nav2_util::CallbackReturn BehaviorServer::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(get_logger(), "Deactivating %s", name_.c_str());
 
@@ -168,8 +151,7 @@ BehaviorServer::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-BehaviorServer::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
+nav2_util::CallbackReturn BehaviorServer::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
 {
   RCLCPP_INFO(get_logger(), "Cleaning up %s", name_.c_str());
 
@@ -188,8 +170,7 @@ BehaviorServer::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   return nav2_util::CallbackReturn::SUCCESS;
 }
 
-nav2_util::CallbackReturn
-BehaviorServer::on_shutdown(const rclcpp_lifecycle::State &)
+nav2_util::CallbackReturn BehaviorServer::on_shutdown(const rclcpp_lifecycle::State &)
 {
   RCLCPP_INFO(get_logger(), "Shutting down %s", name_.c_str());
   return nav2_util::CallbackReturn::SUCCESS;

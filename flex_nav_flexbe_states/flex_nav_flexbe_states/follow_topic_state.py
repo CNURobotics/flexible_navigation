@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -38,13 +38,13 @@
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyActionClient
 
-from flex_nav_common.action import *
-from nav_msgs.msg import Path
+from flex_nav_common.action import FollowTopic
 from std_msgs.msg import String
+
 
 class FollowTopicState(EventState):
     """
-    Instructs a controller to listen to the topic of a planner
+    Instruct a controller to listen to the topic of a planner.
 
     -- planner_topic        String    The planner to listen to
     -- controller_topic     String    The controller to command
@@ -56,12 +56,10 @@ class FollowTopicState(EventState):
     """
 
     def __init__(self, planner_topic, controller_topic):
-        """
-        Constructor
-        """
-        super(FollowTopicState, self).__init__(outcomes=['done', 'failed', 'canceled'])
+        """Construct state."""
+        super().__init__(outcomes=['done', 'failed', 'canceled'])
 
-        ProxyActionClient._initialize(FollowTopicState._node)
+        ProxyActionClient.initialize(FollowTopicState._node)
 
         self._planner_topic = planner_topic
         self._controller_topic = controller_topic
@@ -69,10 +67,7 @@ class FollowTopicState(EventState):
         self._return = None
 
     def execute(self, userdata):
-        """
-        Execute this state
-        """
-
+        """Execute this state."""
         if self._client.has_result(self._controller_topic):
             result = self._client.get_result(self._controller_topic)
 
@@ -95,17 +90,14 @@ class FollowTopicState(EventState):
         return self._return
 
     def on_enter(self, userdata):
-        """
-        On enter, send action goal
-        """
+        """Send action goal."""
+        self._return = None  # Reset the completion flag
 
-        self._return = None # Reset the completion flag
-
-        topic = String(data = self._planner_topic)
-        result = FollowTopic.Goal(topic = topic)
+        topic = String(data=self._planner_topic)
+        result = FollowTopic.Goal(topic=topic)
 
         try:
-            Logger.loginfo('[%s] - Listening to topic: %s' %  (self.name, self._planner_topic))
+            Logger.loginfo('[%s] - Listening to topic: %s' % (self.name, self._planner_topic))
             self._client.send_goal(self._controller_topic, result)
         except Exception as e:
             Logger.logwarn('[%s] - Failed to listen to topic: %s' % str(e))
@@ -120,23 +112,17 @@ class FollowTopicState(EventState):
             self._client.cancel(self._controller_topic)
 
     def on_stop(self):
-        """
-        Will be executed once when the behavior stops or is preempted.
-        """
         if self._controller_topic in ProxyActionClient._result:
             ProxyActionClient._result[self._controller_topic] = None
 
         if self._client.is_active(self._controller_topic):
-            Logger.logerr('%s   Canceling active goal on SM stop'% (self.name))
+            Logger.logerr('%s   Canceling active goal on SM stop' % (self.name))
             self._client.cancel(self._controller_topic)
 
     def on_pause(self):
-        """
-        Will be executed each time this state is paused.
-        """
         if self._controller_topic in ProxyActionClient._result:
             ProxyActionClient._result[self._controller_topic] = None
 
         if self._client.is_active(self._controller_topic):
-            Logger.logerr('%s   Canceling active goal on SM pause'% (self.name))
+            Logger.logerr('%s   Canceling active goal on SM pause' % (self.name))
             self._client.cancel(self._controller_topic)

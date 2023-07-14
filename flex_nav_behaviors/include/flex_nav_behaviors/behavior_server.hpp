@@ -15,18 +15,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License. Reserved.
 
-
 #include <chrono>
-#include <string>
 #include <memory>
+#include <string>
 #include <vector>
 
-#include "nav2_util/lifecycle_node.hpp"
-#include "tf2_ros/transform_listener.h"
-#include "tf2_ros/create_timer_ros.h"
-#include "pluginlib/class_loader.hpp"
-#include "pluginlib/class_list_macros.hpp"
 #include "nav2_core/behavior.hpp"
+#include "nav2_util/lifecycle_node.hpp"
+#include "pluginlib/class_list_macros.hpp"
+#include "pluginlib/class_loader.hpp"
+#include "tf2_ros/create_timer_ros.h"
+#include "tf2_ros/transform_listener.h"
 
 #ifndef FLEX_NAV_BEHAVIORS__BEHAVIOR_SERVER_HPP_
 #define FLEX_NAV_BEHAVIORS__BEHAVIOR_SERVER_HPP_
@@ -37,7 +36,6 @@ namespace flex_nav_behavior_server
 class BehaviorServer : public nav2_util::LifecycleNode
 {
 public:
-
   explicit BehaviorServer(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
   ~BehaviorServer();
 
@@ -69,9 +67,8 @@ protected:
 
   double transform_tolerance_;
   std::string name_;
-
 };
 
-}  // namespace behavior_server
+}  // namespace flex_nav_behavior_server
 
-#endif //FLEX_NAV_BEHAVIORS__BEHAVIOR_SERVER_HPP_
+#endif  // FLEX_NAV_BEHAVIORS__BEHAVIOR_SERVER_HPP_

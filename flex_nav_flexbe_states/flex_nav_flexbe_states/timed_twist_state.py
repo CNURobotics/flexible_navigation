@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016-2022
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -35,7 +35,6 @@
 #       POSSIBILITY OF SUCH DAMAGE.
 ###############################################################################
 
-import rclpy
 from rclpy.duration import Duration
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyPublisher
@@ -45,7 +44,7 @@ from geometry_msgs.msg import Twist
 
 
 class TimedTwistState(EventState):
-    '''
+    """
     This state publishes an open loop constant Twist and/or TwistStamped command based on parameters.
 
     -- target_time          float     Time which needs to have passed since the behavior started.
@@ -54,22 +53,22 @@ class TimedTwistState(EventState):
     -- cmd_topic            string    topic name of the robot velocity command (default: 'cmd_vel')
     -- cmd_topic_stamped    string    optional topic name of the robot stamped velocity command (default: '')
     <= done                 Given time has passed.
-    '''
+    """
 
     def __init__(self, target_time, velocity, rotation_rate, cmd_topic='cmd_vel', cmd_topic_stamped=''):
         # Declare outcomes, input_keys, and output_keys by calling the super constructor with the corresponding arguments.
-        super(TimedTwistState, self).__init__(outcomes = ['done'])
+        super().__init__(outcomes=['done'])
 
-        ProxyPublisher._initialize(TimedTwistState._node)
+        ProxyPublisher.initialize(TimedTwistState._node)
 
         # Store state parameter for later use.
-        self._target_time           = Duration(seconds=target_time)
+        self._target_time = Duration(seconds=target_time)
 
         # The constructor is called when building the state machine, not when actually starting the behavior.
         # Thus, we cannot save the starting time now and will do so later.
         self._start_time = None
 
-        self._done       = None # Track the outcome so we can detect if transition is blocked
+        self._done = None  # Track the outcome so we can detect if transition is blocked
 
         self._twist = Twist()
         self._twist.linear.x  = velocity
@@ -77,17 +76,16 @@ class TimedTwistState(EventState):
         self._pub = ProxyPublisher()
         if isinstance(cmd_topic, str) and len(cmd_topic) != 0:
             self._cmd_topic = cmd_topic
-            self._pub.createPublisher( cmd_topic, Twist)
+            self._pub.createPublisher(cmd_topic, Twist)
         else:
             self._cmd_topic = None
-
 
         if isinstance(cmd_topic_stamped, str) and len(cmd_topic_stamped) != 0:
             self._twist_stamped  = TwistStamped()
             self._twist_stamped.twist.linear.x  = velocity
             self._twist_stamped.twist.angular.z = rotation_rate
             self._cmd_topic_stamped = cmd_topic_stamped
-            self._pub.createPublisher( cmd_topic_stamped, TwistStamped)
+            self._pub.createPublisher(cmd_topic_stamped, TwistStamped)
         else:
             self._twist_stamped  = None
             self._cmd_topic_stamped = None
@@ -100,7 +98,6 @@ class TimedTwistState(EventState):
         assert self._cmd_topic or self._cmd_topic_stamped, "Must define at least one cmd publishing topic"
         assert self._cmd_topic != self._cmd_topic_stamped, "Must be different topic names!"
 
-
     def execute(self, userdata):
         # This method is called periodically while the state is active.
         # If no outcome is returned, the state will stay active.
@@ -112,7 +109,7 @@ class TimedTwistState(EventState):
                 self._pub.publish(self._cmd_topic, Twist())
 
             if self._cmd_topic_stamped:
-                ts = TwistStamped() # Zero twist to stop if blocked
+                ts = TwistStamped()  # Zero twist to stop if blocked
                 ts.header.stamp = self._node.get_clock().now().to_msg()  # update the time stamp
                 self._pub.publish(self._cmd_topic_stamped, ts)
 
@@ -135,4 +132,4 @@ class TimedTwistState(EventState):
     def on_enter(self, userdata):
         # This method is called when the state becomes active, i.e. a transition from another state to this one is taken.
         self._start_time = self._node.get_clock().now()
-        self._done       = None # reset the completion flag
+        self._done = None  # reset the completion flag

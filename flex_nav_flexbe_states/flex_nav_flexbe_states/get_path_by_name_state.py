@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2022
+#  Copyright (c) 2022-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -38,11 +38,12 @@
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyActionClient
 
-from flex_nav_common.action import *
+from flex_nav_common.action import GetPathByName
+
 
 class GetPathByNameState(EventState):
     """
-    Retrieves a named plan from an action server.
+    Retrieve a named plan from an action server.
 
     The state will use an optional path_name on user data if available,
     but this is not required.
@@ -59,12 +60,9 @@ class GetPathByNameState(EventState):
     """
 
     def __init__(self, action_server_name='get_path_by_name', path_name='empty'):
-        """
-        Constructor
-        """
-        super(GetPathByNameState, self).__init__(outcomes=['success', 'empty', 'failed'], output_keys=['plan'])
+        super().__init__(outcomes=['success', 'empty', 'failed'], output_keys=['plan'])
 
-        ProxyActionClient._initialize(GetPathByNameState._node)
+        ProxyActionClient.initialize(GetPathByNameState._node)
 
         self._action_server_name = action_server_name
         self._client = ProxyActionClient({self._action_server_name: GetPathByName})
@@ -72,10 +70,6 @@ class GetPathByNameState(EventState):
         self._return = None
 
     def execute(self, userdata):
-        """
-        Execute this state
-        """
-
         if self._client.has_result(self._action_server_name):
             result = self._client.get_result(self._action_server_name)
 
@@ -108,15 +102,13 @@ class GetPathByNameState(EventState):
         return self._return
 
     def on_enter(self, userdata):
-        """Upon entering the state, send the footstep plan request."""
-
         self._return = None
         path_name = self._path_name
         if path_name is None:
             try:
                 # Get name from user data if it exists, otherwise
-                result = userdata.path_name
-            except:
+                path_name = userdata.path_name
+            except Exception:  # pylint: disable=W0703
                 pass
 
         if path_name is None:
@@ -128,8 +120,8 @@ class GetPathByNameState(EventState):
             path_goal = GetPathByName.Goal(path_name=path_name)
 
             self._client.send_goal(self._action_server_name, path_goal)
-        except Exception as e:
-            Logger.logwarn('%s    Failed to send plan request: %s' % (self.name, str(e)))
+        except Exception as exc:
+            Logger.logwarn('%s    Failed to send plan request: %s' % (self.name, str(exc)))
             userdata.plan = None
             return 'failed'
 
@@ -138,5 +130,5 @@ class GetPathByNameState(EventState):
             ProxyActionClient._result[self._action_server_name] = None
 
         if self._client.is_active(self._action_server_name):
-            Logger.logerr('%s    Canceling active goal' % (self.name) )
+            Logger.logerr('%s    Canceling active goal' % (self.name))
             self._client.cancel(self._action_server_name)

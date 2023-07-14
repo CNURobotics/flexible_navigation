@@ -25,11 +25,14 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>flex_nav_common</exec_depend>
-  <exec_depend>flex_nav_flexbe_states</exec_depend>
-  <exec_depend>flex_nav_controllers</exec_depend>
-  <exec_depend>flex_nav_planners</exec_depend>
+  <exec_depend>flexbe_core</exec_depend>
+  <exec_depend>flexbe_onboard</exec_depend>
   <exec_depend>flex_nav_behaviors</exec_depend>
+  <exec_depend>flex_nav_common</exec_depend>
+  <exec_depend>flex_nav_controllers</exec_depend>
+  <exec_depend>flex_nav_flexbe_states</exec_depend>
+  <exec_depend>flex_nav_planners</exec_depend>
+  <exec_depend>flex_nav_pure_pursuit</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

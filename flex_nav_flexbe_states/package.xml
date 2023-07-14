@@ -1,39 +1,39 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-	<name>flex_nav_flexbe_states</name>
-	<version>0.3.1</version>
-	<description>
-		 flex_nav_flexbe_states provides a collection of FlexBE states used for robot navigation
-	</description>
-	<author>Justin Willis</author>
-	<author email="joshua.zutell.18@cnu.edu">Joshua Zutell</author>
-	<maintainer email="david.conner@cnu.edu">Dr. David Conner</maintainer>
-	<license>BSD</license>
+  <name>flex_nav_flexbe_states</name>
+  <version>0.3.1</version>
+  <description>
+     flex_nav_flexbe_states provides a collection of FlexBE states used for robot navigation
+  </description>
+  <author>Justin Willis</author>
+  <author email="joshua.zutell.18@cnu.edu">Joshua Zutell</author>
+  <maintainer email="david.conner@cnu.edu">Dr. David Conner</maintainer>
+  <license>BSD</license>
 
-	<url>http://ros.org/wiki/flexbe_states</url>
+  <url>http://ros.org/wiki/flexbe_states</url>
 
-	<buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-	<depend>rclpy</depend>
-	<depend>tf2</depend>
-	<depend>tf2_ros</depend>
-	<depend>tf2_geometry_msgs</depend>
-	<depend>geometry_msgs</depend>
-	<depend>flexbe_msgs</depend>
-	<depend>flexbe_core</depend>
+  <depend>rclpy</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>flexbe_msgs</depend>
+  <depend>flexbe_core</depend>
 
-	<test_depend>ament_copyright</test_depend>
+  <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
 
-	<buildtool_depend>ament_cmake</buildtool_depend>
-	<buildtool_depend>ament_cmake_python</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
-	<export>
-			<build_type>ament_cmake</build_type>
-	    <flexbe_states />
-	</export>
+  <export>
+    <build_type>ament_cmake</build_type>
+    <flexbe_states />
+  </export>
 
 </package>

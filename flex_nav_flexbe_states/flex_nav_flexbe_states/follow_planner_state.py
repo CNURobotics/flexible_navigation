@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-#  Copyright (c) 2016
+#  Copyright (c) 2016-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -38,12 +38,12 @@
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyActionClient
 
-from flex_nav_common.action import *
-from nav_msgs.msg import Path
+from flex_nav_common.action import FollowPath
+
 
 class FollowPlannerState(EventState):
     """
-    Generates another path from a previously generated path
+    Generate another path from a previously generated path.
 
     -- topic        string    The topic to publish goals to
 
@@ -56,52 +56,49 @@ class FollowPlannerState(EventState):
     """
 
     def __init__(self, topic):
-        """
-        Constructor
-        """
-        super(FollowPlannerState, self).__init__(outcomes=['done', 'failed', 'canceled'], input_keys=['plan'])
+        """Construct the state."""
+        super().__init__(outcomes=['done', 'failed', 'canceled'], input_keys=['plan'])
 
-        ProxyActionClient._initialize(FollowPlannerState._node)
+        ProxyActionClient.initialize(FollowPlannerState._node)
 
         self._action_topic = topic
         self._client = ProxyActionClient({self._action_topic: FollowPath})
         self._return = None
 
     def execute(self, userdata):
-        """
-        Execute this state
-        """
+        """Execute this state."""
+        if self._return is not None:
+            return self._return
+
         if self._client.has_result(self._action_topic):
             result = self._client.get_result(self._action_topic)
-            ProxyActionClient._result[self._action_topic] = None # Reset to avoid spam if blocked by low autonomy
+            ProxyActionClient._result[self._action_topic] = None  # Reset to avoid spam if blocked by low autonomy
             if result.code == 0:
                 Logger.loginfo('%s   Planning Success!' % (self.name))
                 self._return = 'done'
             elif result.code == 1:
                 Logger.logerr('%s   Failure' % (self.name))
-                self._return =  'failed'
+                self._return = 'failed'
             elif result.code == 2:
                 Logger.logerr('%s   canceled' % (self.name))
-                self._return =  'canceled'
+                self._return = 'canceled'
             else:
                 Logger.logerr('%s   Unknown error' % (self.name))
-                self._return =  'failed'
+                self._return = 'failed'
 
         return self._return
 
     def on_enter(self, userdata):
-        """
-        On enter, send action goal
-        """
-        self._return = None # Rest the completion flag
-        result = FollowPath.Goal(path = userdata.plan)
+        """Send action goal on enter."""
+        self._return = None  # Rest the completion flag
+        result = FollowPath.Goal(path=userdata.plan)
 
         try:
             Logger.loginfo('%s   Following the path to victory!' % (self.name))
             self._client.send_goal(self._action_topic, result)
         except Exception as e:
             Logger.logwarn('%s   Failed to follow path: %s' % (self.name, str(e)))
-            return 'failed'
+            self._return = 'failed'
 
     def on_exit(self, userdata):
         if self._action_topic in ProxyActionClient._result:
@@ -112,23 +109,17 @@ class FollowPlannerState(EventState):
             self._client.cancel(self._action_topic)
 
     def on_stop(self):
-        """
-        Will be executed once when the behavior stops or is preempted.
-        """
         if self._action_topic in ProxyActionClient._result:
             ProxyActionClient._result[self._action_topic] = None
 
         if self._client.is_active(self._action_topic):
-            Logger.logerr('%s   Canceling active goal on SM stop'% (self.name))
+            Logger.logerr('%s   Canceling active goal on SM stop' % (self.name))
             self._client.cancel(self._action_topic)
 
     def on_pause(self):
-        """
-        Will be executed each time this state is paused.
-        """
         if self._action_topic in ProxyActionClient._result:
             ProxyActionClient._result[self._action_topic] = None
 
         if self._client.is_active(self._action_topic):
-            Logger.logerr('%s   Canceling active goal on SM pause'% (self.name))
+            Logger.logerr('%s   Canceling active goal on SM pause' % (self.name))
             self._client.cancel(self._action_topic)
