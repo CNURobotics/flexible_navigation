@@ -1,85 +1,99 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(flex_nav_planners)
 
-find_package(catkin REQUIRED
-	COMPONENTS
-		actionlib
-		actionlib_msgs
-		base_local_planner
-		flex_nav_common
-		geometry_msgs
-		message_generation
-		message_runtime
-		nav_core
-		nav_msgs
-		roscpp
-		std_msgs
-		tf2_geometry_msgs
-		tf2_ros
-)
+find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 
-catkin_package(
-	CATKIN_DEPENDS
-		actionlib_msgs
-		base_local_planner
-		geometry_msgs
-		message_runtime
-		nav_core
-		nav_msgs
-		roscpp
-		std_msgs
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+
+find_package(rclpy REQUIRED)
+
+find_package(flex_nav_common REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(dwb_core REQUIRED)
+find_package(nav2_core REQUIRED)
+find_package(nav2_msgs REQUIRED)
+find_package(nav2_navfn_planner REQUIRED)
+find_package(nav2_util REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+
+set(dependencies
+  rclcpp
+  rclcpp_action
+  rclpy
+  dwb_core
+  flex_nav_common
+  std_msgs
+  nav2_core
+  nav2_msgs
+  nav2_navfn_planner
+  nav2_util
+  geometry_msgs
 )
 
 include_directories(
-	include
-	${catkin_INCLUDE_DIRS}
+    include
 )
 
 # flex_planner_follow_path node
 add_executable(${PROJECT_NAME}_follow_path_node
-	src/follow_path_node.cpp
-	src/follow_path.cpp
-	src/follow_common.cpp
+    src/follow_path_node.cpp
+    src/follow_path.cpp
+    src/follow_common.cpp
+    src/simple_smoother.cpp
 )
-add_dependencies(${PROJECT_NAME}_follow_path_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_follow_path_node
-	${Boost_LIBRARIES}
-	${catkin_LIBRARIES}
-)
+ament_target_dependencies(${PROJECT_NAME}_follow_path_node
+    ${dependencies})
 
 # flex_planner_follow_topic node
 add_executable(${PROJECT_NAME}_follow_topic_node
-	src/follow_topic_node.cpp
-	src/follow_topic.cpp
-	src/follow_common.cpp
+    src/follow_topic_node.cpp
+    src/follow_topic.cpp
+    src/follow_common.cpp
+    src/simple_smoother.cpp
 )
-add_dependencies(${PROJECT_NAME}_follow_topic_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_follow_topic_node
-	${Boost_LIBRARIES}
-	${catkin_LIBRARIES}
-)
+ament_target_dependencies(${PROJECT_NAME}_follow_topic_node
+    ${dependencies})
 
 # flex_planner_get_path node
 add_executable(${PROJECT_NAME}_get_path_node
-	src/get_path_node.cpp
-	src/get_path.cpp
-)
-add_dependencies(${PROJECT_NAME}_get_path_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_get_path_node
-	${Boost_LIBRARIES}
-	${catkin_LIBRARIES}
+    src/get_path_node.cpp
+    src/get_path.cpp
+    src/follow_common.cpp
+    src/simple_smoother.cpp
 )
 
+ament_target_dependencies(${PROJECT_NAME}_get_path_node
+    ${dependencies})
+
+# Install Python modules
+ament_python_install_package(${PROJECT_NAME})
+
 install(
-	TARGETS
-		${PROJECT_NAME}_follow_path_node
-		${PROJECT_NAME}_follow_topic_node
-		${PROJECT_NAME}_get_path_node
-		RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+    TARGETS
+        ${PROJECT_NAME}_follow_path_node
+        ${PROJECT_NAME}_follow_topic_node
+        ${PROJECT_NAME}_get_path_node
+        RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 # Mark cpp header files for installation
 install(DIRECTORY include/${PROJECT_NAME}/
-	DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-	FILES_MATCHING PATTERN "*.h"
+    DESTINATION include//${PROJECT_NAME}
+    FILES_MATCHING PATTERN "*.h"
 )
+install(DIRECTORY paths/
+    DESTINATION paths/
+    FILES_MATCHING PATTERN "*.yaml"
+)
+
+# Install Python executables
+install(PROGRAMS
+  scripts/paths_by_name
+  DESTINATION lib/${PROJECT_NAME}
+)
+ament_package()

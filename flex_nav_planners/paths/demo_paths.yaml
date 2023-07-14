@@ -1,0 +1,28 @@
+empty:
+    frame_id: 'map'
+    poses: []
+test_path: # Demo path named 'test_path' with 3 poses specified
+    frame_id: 'map'
+    poses:
+        -   frame_id: ''  # Optional, will use one given above if missing or empty
+            position:
+                x: 0.005
+                y: 0.000
+                z: 0.001  # z-value is optional (z=0.0 by default)
+            orientation:  # Orientation is optional
+                w: 1.0
+                x: 0.0
+                y: 0.0
+                z: 0.0
+        -   position:
+                x: 0.500
+                y: 0.005
+        -   frame_id: ''  # Optional, will use one given above
+            position:
+                x: 1.000
+                y: 0.005
+            orientation: # Orientation is optional
+                w: 0.5
+                x: 0.0
+                y: 0.0
+                z: 0.5

@@ -2,10 +2,10 @@ std_msgs/String    topic
 ---
 uint8 SUCCESS=0
 uint8 FAILURE=1
-uint8 PREEMPT=2
+uint8 CANCEL=2
 
-uint8              code
-geometry_msgs/Pose pose
+uint8                      code
+geometry_msgs/PoseStamped  pose
 ---
-nav_msgs/Path      path
-geometry_msgs/Pose pose
+geometry_msgs/TwistStamped twist
+geometry_msgs/PoseStamped  pose

@@ -1,45 +1,32 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(flex_nav_common)
 
-find_package(catkin REQUIRED
-	COMPONENTS
-		actionlib
-		actionlib_msgs
-		genmsg
-		geometry_msgs
-		message_generation
-		message_runtime
-		nav_core
-		nav_msgs
-		roscpp
-		std_msgs
+# Default to C++14
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(action_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/ClearCostmap.action"
+  "action/FollowPath.action"
+  "action/FollowTopic.action"
+  "action/GetPath.action"
+  "action/GetPathByName.action"
+  DEPENDENCIES builtin_interfaces geometry_msgs std_msgs action_msgs nav_msgs
 )
 
-add_action_files(
-	DIRECTORY
-		action
-	FILES
-		ClearCostmap.action
-		FollowPath.action
-		FollowTopic.action
-		GetPath.action
-)
-
-generate_messages(
-	DEPENDENCIES
-		actionlib_msgs
-		geometry_msgs
-		nav_msgs
-		std_msgs
-)
-
-catkin_package(
-	CATKIN_DEPENDS
-		actionlib_msgs
-		geometry_msgs
-		message_runtime
-		nav_core
-		nav_msgs
-		roscpp
-		std_msgs
-)
+ament_export_dependencies(rosidl_default_runtime)
+ament_package()

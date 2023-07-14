@@ -1,9 +1,11 @@
 path: flex_nav_flexbe_states.get_pose_state
 class: GetPoseState
 
-launch: '<launch>
-	<node name="localization" pkg="tf" type="static_transform_publisher" args="0.0 0.0 0 0 0 0 1 world map 100" />
-	<node name="rviz" pkg="rviz" type="rviz" output="screen"/>
-</launch>'
+#launch: '<launch>
+#	<node name="localization" pkg="tf" type="static_transform_publisher" args="0.0 0.0 0 0 0 0 1 world map 100" />
+#	<node name="rviz" pkg="rviz" type="rviz" output="screen"/>
+#</launch>'
+
+import_only: true
 
 outcome: done

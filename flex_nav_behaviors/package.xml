@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+	<name>flex_nav_behaviors</name>
+	<version>1.1.0</version>
+	<description>
+
+		The flex_nav package is largely based on <a href="https://navigation.ros.org/">navigation2</a>
+		meaning that, flex_nav supports the same features, but implements them differently.
+
+	</description>
+	<author>Justin Willis</author>
+	<author email="joshua.zutell.18@cnu.edu">Joshua Zutell</author>
+	<maintainer email="david.conner@cnu.edu">Dr. David Conner</maintainer>
+	<license>BSD</license>
+
+	<buildtool_depend>ament_cmake</buildtool_depend>
+
+	<build_depend>flex_nav_common</build_depend>
+	<build_depend>geometry_msgs</build_depend>
+	<build_depend>nav2_behaviors</build_depend>
+	<build_depend>nav2_core</build_depend>
+	<build_depend>nav2_costmap_2d</build_depend>
+	<build_depend>nav2_msgs</build_depend>
+	<build_depend>nav2_util</build_depend>
+
+	<build_depend>rclcpp</build_depend>
+	<build_depend>std_msgs</build_depend>
+	<build_depend>tf2_geometry_msgs</build_depend>
+	<build_depend>tf2_ros</build_depend>
+
+	<exec_depend>rosidl_default_runtime</exec_depend>
+
+	<export>
+    	<build_type>ament_cmake</build_type>
+  </export>
+
+</package>

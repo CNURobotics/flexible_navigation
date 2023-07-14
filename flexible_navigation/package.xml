@@ -1,6 +1,8 @@
-<package>
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
   <name>flexible_navigation</name>
-  <version>0.2.0</version>
+  <version>1.1.0</version>
   <description>
     Flexible Navigation is a rework of the ROS Navigation stack into independent modules that
     interface with FlexBE (http://wiki.ros.org/flexbe) compatible state implementations.
@@ -8,21 +10,31 @@
     These allow a user to graphically chain together states in a state machine to essentially create their own navigation stack to suit any need.
 
     This allows for supervisory and sliding autonomy within navigation, and better control over contingencies and recovery behaviors.
-  </description>
+
+    The flex_nav package is largely based on <a href="https://navigation.ros.org/">navigation2</a>
+    meaning that, flex_nav supports the same features, but implements them differently.
+
+	</description>
+	<author>Justin Willis</author>
+	<author email="joshua.zutell.18@cnu.edu">Joshua Zutell</author>
 	<maintainer email="david.conner@cnu.edu">Dr. David Conner</maintainer>
 	<license>BSD</license>
   <url type="website">http://ros.org/wiki/flexible_navigation</url>
-  <url type="repository">https://github.com/CNURobotics/flexible_navigation</url>
-  <url type="bugtracker">https://github.com/CNURobotics/flexible_navigation/issues</url>
+  <url type="repository">https://github.com/FlexBE/flexible_navigation</url>
+  <url type="bugtracker">https://github.com/FlexBE/flexible_navigation/issues</url>
 
-  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <run_depend>flex_nav_common</run_depend>
-  <run_depend>flex_nav_flexbe_states</run_depend>
-  <run_depend>flex_nav_controllers</run_depend>
-  <run_depend>flex_nav_planners</run_depend>
+  <exec_depend>flexbe_core</exec_depend>
+  <exec_depend>flexbe_onboard</exec_depend>
+  <exec_depend>flex_nav_behaviors</exec_depend>
+  <exec_depend>flex_nav_common</exec_depend>
+  <exec_depend>flex_nav_controllers</exec_depend>
+  <exec_depend>flex_nav_flexbe_states</exec_depend>
+  <exec_depend>flex_nav_planners</exec_depend>
+  <exec_depend>flex_nav_pure_pursuit</exec_depend>
 
   <export>
-    <metapackage/>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>
