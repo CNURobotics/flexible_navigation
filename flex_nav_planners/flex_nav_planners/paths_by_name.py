@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 ###############################################################################
-#  Copyright (c) 2022
+#  Copyright (c) 2022-2023
 #  Capable Humanitarian Robotics and Intelligent Systems Lab (CHRISLab)
 #  Christopher Newport University
 #
@@ -34,6 +34,7 @@
 #       WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 #       POSSIBILITY OF SUCH DAMAGE.
 ###############################################################################
+from datetime import datetime
 
 import math
 import numpy as np
@@ -42,11 +43,16 @@ from copy import deepcopy
 
 import rclpy
 from rclpy.action import ActionServer
+from rclpy.action import CancelResponse
+from rclpy.action import GoalResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
 from flex_nav_common.action import GetPathByName
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Point, PoseStamped, Quaternion
+
 
 class GetPathByNameActionServer(Node):
 
@@ -56,7 +62,11 @@ class GetPathByNameActionServer(Node):
             self,
             GetPathByName,
             'get_path_by_name',
-            self.execute_callback)
+            execute_callback=self.execute_callback,
+            callback_group=ReentrantCallbackGroup(),
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback)
+
         self.declare_parameter('yaml_paths_file', "")
         self.declare_parameter('plan_topic', "plan")
         self.declare_parameter('max_distance', 0.25)
@@ -73,6 +83,20 @@ class GetPathByNameActionServer(Node):
             if paths:
                 self._paths_by_name.update(paths)
 
+    def destroy(self):
+        self._action_server.destroy()
+        super().destroy_node()
+
+    def goal_callback(self, goal_request):
+        # Accepts or rejects a client request to begin an action
+        self.get_logger().info('Received goal request')
+        self._goal = goal_request
+        return GoalResponse.ACCEPT
+
+    def cancel_callback(self, goal_handle):
+        # Accepts or rejects a client request to cancel an action
+        self.get_logger().info('Received cancel request')
+        return CancelResponse.ACCEPT
 
     def get_pose_data(self, ndx, poses, current_frame_id):
         pose = poses[ndx]
@@ -87,15 +111,15 @@ class GetPathByNameActionServer(Node):
         position = np.array([pose['position']['x'], pose['position']['y'], 0.0])
         try:
             position[2] = pose['position']['z']
-        except:
-            pass # z-value is optional, stick with default 0.
+        except Exception:  # pylint: disable=W0703
+            pass  # z-value is optional, stick with default 0.
 
         try:
-            orientation=Quaternion(x=pose['orientation']['x'],
-                                   y=pose['orientation']['y'],
-                                   z=pose['orientation']['z'],
-                                   w=pose['orientation']['w'])
-        except:
+            orientation = Quaternion(x=pose['orientation']['x'],
+                                     y=pose['orientation']['y'],
+                                     z=pose['orientation']['z'],
+                                     w=pose['orientation']['w'])
+        except Exception:  # pylint: disable=W0703
             # orientation is optional
             orientation = None
 
@@ -109,10 +133,10 @@ class GetPathByNameActionServer(Node):
 
         magnitude = np.linalg.norm(vector)
         angle = math.atan2(vector[1], vector[0])
-        orientation=Quaternion(x=0.,
-                               y=0.,
-                               z=math.sin(angle/2), # Assumes 2D !
-                               w=math.cos(angle/2))
+        orientation = Quaternion(x=0.,
+                                 y=0.,
+                                 z=math.sin(angle / 2),  # Assumes 2D !
+                                 w=math.cos(angle / 2))
         return vector, magnitude, angle, orientation
 
     def load_paths_from_yaml(self, yaml_file):
@@ -124,7 +148,7 @@ class GetPathByNameActionServer(Node):
             self.get_logger().error(f'Failed to load yaml data for paths by name from {yaml_file}')
             self.get_logger().error(str(exc))
             return None
-        except (IOError, OSError) as exc:
+        except (IOError, OSError):
             self.get_logger().error(f'Failed to open paths by name from {yaml_file}')
             return None
 
@@ -137,8 +161,8 @@ class GetPathByNameActionServer(Node):
                     path = Path()
                     try:
                         frame_id = data['frame_id']
-                    except:
-                        frame_id = 'map' # Default frame ID if unspecified
+                    except Exception:  # pylint: disable=W0703
+                        frame_id = 'map'  # Default frame ID if unspecified
                         self.get_logger().info(f'Using default frame_id = {frame_id}!')
 
                     try:
@@ -172,7 +196,7 @@ class GetPathByNameActionServer(Node):
                         ros_pose.header.frame_id = pose_frame_id
                         ros_pose.pose.position = Point(x=prior_wp_posn[0], y=prior_wp_posn[1], z=prior_wp_posn[2])
                         ros_pose.pose.orientation = prior_wp_quat
-                        path.poses.append(ros_pose) # Starting point
+                        path.poses.append(ros_pose)  # Starting point
 
                         last_position = prior_wp_posn
                         next_wp_posn = prior_wp_posn
@@ -183,87 +207,88 @@ class GetPathByNameActionServer(Node):
                         continue
 
                     for i in range(1, len(poses)):
-                      try:
-                        prior_wp_posn = next_wp_posn
-                        prior_wp_quat = next_wp_quat
-                        prior_angle  = angle
-                        prior_vector = vector
-                        prior_mag = magnitude
+                        try:
+                            prior_wp_posn = next_wp_posn
+                            prior_wp_quat = next_wp_quat
+                            # prior_angle  = angle
+                            # prior_vector = vector
+                            # prior_mag = magnitude
 
-                        pose = poses[i]
-                        next_wp_posn, next_wp_quat, next_frame_id = self.get_pose_data(i, poses, pose_frame_id)
-                        vector, magnitude, angle, vec_orientation = self.get_vector(prior_wp_posn, next_wp_posn)
+                            # pose = poses[i]
+                            next_wp_posn, next_wp_quat, _ = self.get_pose_data(i, poses, pose_frame_id)
+                            vector, magnitude, angle, vec_orientation = self.get_vector(prior_wp_posn, next_wp_posn)
 
-                        if next_wp_quat is None:
-                            # Look at the average angle with next point
-                            # This will possibly be used as starting point for
-                            # the next segment
-                            next_wp_quat = vec_orientation
-                            if i < len(poses)-1:
-                                follow_position, follow_orientation, follow_frame_id = self.get_pose_data(i+1, poses, pose_frame_id)
-                                _, follow_magnitude, follow_angle, _ = self.get_vector(prior_wp_posn, follow_position)
-                                mag_sum = magnitude + follow_magnitude
-                                if mag_sum > 0.0001:
-                                    # Shorter segments have MORE weight
-                                    # unless they are trivially short as to
-                                    # be ignored (e.g. duplicate points with ill defined angle)
-                                    if magnitude/mag_sum < 0.02:
-                                        next_angle = follow_angle
-                                    elif magnitude/mag_sum > 0.98:
-                                        next_angle = angle
-                                    else:
-                                        next_angle = (follow_magnitude*angle  + magnitude*follow_angle)/mag_sum
+                            if next_wp_quat is None:
+                                # Look at the average angle with next point
+                                # This will possibly be used as starting point for
+                                # the next segment
+                                next_wp_quat = vec_orientation
+                                if i < len(poses) - 1:
+                                    follow_position, follow_orientation, follow_frame_id = \
+                                        self.get_pose_data(i + 1, poses, pose_frame_id)
+                                    _, follow_magnitude, follow_angle, _ = self.get_vector(prior_wp_posn, follow_position)
+                                    mag_sum = magnitude + follow_magnitude
+                                    if mag_sum > 0.0001:
+                                        # Shorter segments have MORE weight
+                                        # unless they are trivially short as to
+                                        # be ignored (e.g. duplicate points with ill defined angle)
+                                        frac = magnitude / mag_sum
+                                        if frac < 0.02:
+                                            next_angle = follow_angle
+                                        elif frac > 0.98:
+                                            next_angle = angle
+                                        else:
+                                            next_angle = (follow_magnitude * angle  + magnitude * follow_angle) / mag_sum
 
-                                    next_wp_quat=Quaternion(x=0.,
-                                                            y=0.,
-                                                            z=math.sin(next_angle/2),
-                                                            w=math.cos(next_angle/2))
+                                        next_wp_quat = Quaternion(x=0.,
+                                                                  y=0.,
+                                                                  z=math.sin(next_angle / 2),
+                                                                  w=math.cos(next_angle / 2))
 
-                        if magnitude > 0.5*self._max_distance:
-                            # Interpolate, otherwise use terminal as the next starting point
-                            increment = self._max_distance/magnitude
+                            if magnitude > 0.5 * self._max_distance:
+                                # Interpolate, otherwise use terminal as the next starting point
+                                increment = self._max_distance / magnitude
 
-                            # We are starting inside the vector, and then
-                            # checking to see if we want a transition point
-                            spacing = np.arange(0.25*increment, 1.0-0.24*increment, increment)
+                                # We are starting inside the vector, and then
+                                # checking to see if we want a transition point
+                                spacing = np.arange(0.25 * increment, 1.0 - 0.24 * increment, increment)
 
-                            # Consider first interpolated point
-                            new_position = prior_wp_posn + spacing[0]*vector
-                            distance = np.linalg.norm(new_position - last_position)
-                            if distance > 0.5*self._max_distance:
-                                # Add intermediate point, to avoid large gap at
-                                # piecewise junction
-                                mid_position = prior_wp_posn
-                                mid_orientation = prior_wp_quat
+                                # Consider first interpolated point
+                                new_position = prior_wp_posn + spacing[0] * vector
+                                distance = np.linalg.norm(new_position - last_position)
+                                if distance > 0.5 * self._max_distance:
+                                    # Add intermediate point, to avoid large gap at
+                                    # piecewise junction
+                                    mid_position = prior_wp_posn
+                                    mid_orientation = prior_wp_quat
+                                    ros_pose = PoseStamped()
+                                    ros_pose.header.frame_id = pose_frame_id
+                                    ros_pose.pose.position = Point(x=mid_position[0], y=mid_position[1], z=mid_position[2])
+                                    ros_pose.pose.orientation = mid_orientation
+                                    path.poses.append(ros_pose)
+
+                                for fraction in spacing:
+                                    position = prior_wp_posn + fraction * vector
+                                    ros_pose = PoseStamped()
+                                    ros_pose.header.frame_id = pose_frame_id
+                                    ros_pose.pose.position = Point(x=position[0], y=position[1], z=position[2])
+                                    ros_pose.pose.orientation = vec_orientation
+                                    path.poses.append(ros_pose)
+                                last_position = position
+
+                            elif i != len(poses) - 1:
+                                # Closely spaced point, just add the terminal point
                                 ros_pose = PoseStamped()
                                 ros_pose.header.frame_id = pose_frame_id
-                                ros_pose.pose.position = Point(x=mid_position[0], y=mid_position[1], z=mid_position[2])
-                                ros_pose.pose.orientation = mid_orientation
-                                path.poses.append(ros_pose)
-
-                            for fraction in spacing:
-                                position = prior_wp_posn + fraction*vector
-                                ros_pose = PoseStamped()
-                                ros_pose.header.frame_id = pose_frame_id
-                                ros_pose.pose.position = Point(x=position[0], y=position[1], z=position[2])
-                                ros_pose.pose.orientation = vec_orientation
-                                path.poses.append(ros_pose)
-                            last_position = position
-
-                        elif i != len(poses)-1:
-                            # Closely spaced point, just add the terminal point
-                            ros_pose = PoseStamped()
-                            ros_pose.header.frame_id = pose_frame_id
-                            ros_pose.pose.position = Point(x=next_wp_posn[0], y=next_wp_posn[1], z=next_wp_posn[2])
-                            ros_pose.pose.orientation = next_wp_quat
-                            path.poses.append(ros_pose) # Starting point
-                            last_position = next_wp_posn
-                      except Exception as exc:
-                          self.get_logger().error(f'Failed during processing of {yaml_file} @pose={i}')
-                          self.get_logger().error(str(exc))
-                          import traceback
-                          self.get_logger().error(traceback.format_exc())
-
+                                ros_pose.pose.position = Point(x=next_wp_posn[0], y=next_wp_posn[1], z=next_wp_posn[2])
+                                ros_pose.pose.orientation = next_wp_quat
+                                path.poses.append(ros_pose)  # Starting point
+                                last_position = next_wp_posn
+                        except Exception as exc:
+                            self.get_logger().error(f'Failed during processing of {yaml_file} @pose={i}')
+                            self.get_logger().error(str(exc))
+                            import traceback
+                            self.get_logger().error(traceback.format_exc().replace("%", "%%"))
 
                     if len(poses) > 1:
                         # Add the final point into the path
@@ -271,7 +296,7 @@ class GetPathByNameActionServer(Node):
                         ros_pose.header.frame_id = pose_frame_id
                         ros_pose.pose.position = Point(x=next_wp_posn[0], y=next_wp_posn[1], z=next_wp_posn[2])
                         ros_pose.pose.orientation = next_wp_quat
-                        path.poses.append(ros_pose) # Starting point
+                        path.poses.append(ros_pose)  # Starting point
                     paths_by_name[name] = path
 
                 return paths_by_name
@@ -340,9 +365,33 @@ class GetPathByNameActionServer(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    action_server = GetPathByNameActionServer()
+    get_path_by_name_server = GetPathByNameActionServer()
 
-    rclpy.spin(action_server)
+    executor = MultiThreadedExecutor()
+    executor.add_node(get_path_by_name_server)
+
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        print("Keyboard interrupt! Shut down get_path_by_name_server!")
+    except Exception as exc:
+        print(f"Exception in get_path_by_name_server executor! {type(exc)}\n  {exc}")
+        import traceback
+        print(f"{traceback.format_exc().replace('%', '%%')}")
+
+    try:
+        get_path_by_name_server.destroy()
+    except Exception as exc:
+        print(f"Exception in get_path_by_name_server shutdown! {type(exc)}\n  {exc}")
+        import traceback
+        print(f"{traceback.format_exc().replace('%', '%%')}")
+
+    print(f"{datetime.now()} - Done with get_path_by_name_server!")
+    try:
+        rclpy.try_shutdown()
+    except Exception as exc:  # pylint: disable=W0703
+        print(f"Exception from rclpy.try_shutdown for get_path_by_name_server: {type(exc)}\n{exc}")
+        print(f"{traceback.format_exc().replace('%', '%%')}")
 
 
 if __name__ == '__main__':
