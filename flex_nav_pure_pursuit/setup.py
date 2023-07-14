@@ -5,7 +5,7 @@ PACKAGE_NAME = 'flex_nav_pure_pursuit'
 
 setup(
     name=PACKAGE_NAME,
-    version='0.3.0',
+    version='1.1.0',
     packages=[PACKAGE_NAME],
     data_files=[
         ('share/ament_index/resource_index/packages',

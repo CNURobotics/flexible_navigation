@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>flex_nav_pure_pursuit</name>
-  <version>0.1.0</version>
+  <version>1.1.0</version>
   <description>Implements Pure Pursuit algorithm to be used for following a path</description>
   <author>Justin Willis</author>
   <author email="joshua.zutell.18@cnu.edu">Joshua Zutell</author>

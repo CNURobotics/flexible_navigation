@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
 	<name>flex_nav_common</name>
-	<version>0.3.1</version>
+	<version>1.1.0</version>
 	<description>
 
 		The flex_nav package is largely based on <a href="https://navigation.ros.org/">navigation2</a>

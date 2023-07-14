@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>flexible_navigation</name>
-  <version>0.3.1</version>
+  <version>1.1.0</version>
   <description>
     Flexible Navigation is a rework of the ROS Navigation stack into independent modules that
     interface with FlexBE (http://wiki.ros.org/flexbe) compatible state implementations.
