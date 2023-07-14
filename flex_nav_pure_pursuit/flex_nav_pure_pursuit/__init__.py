@@ -33,4 +33,5 @@
 #       POSSIBILITY OF SUCH DAMAGE.
 ###############################################################################
 
+"""Initialize pure pursuit module."""
 __all__ = ['pure_pursuit_path', 'pure_pursuit_topic', 'pure_pursuit']

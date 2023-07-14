@@ -1,15 +1,16 @@
+"""Setup for pure pursuit."""
 from setuptools import setup
 
-package_name = 'flex_nav_pure_pursuit'
+PACKAGE_NAME = 'flex_nav_pure_pursuit'
 
 setup(
-    name=package_name,
+    name=PACKAGE_NAME,
     version='0.3.0',
-    packages=[package_name],
+    packages=[PACKAGE_NAME],
     data_files=[
         ('share/ament_index/resource_index/packages',
-            ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
+            ['resource/' + PACKAGE_NAME]),
+        ('share/' + PACKAGE_NAME, ['package.xml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
