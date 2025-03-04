@@ -322,7 +322,7 @@ void FollowTopic::execute()
     feedback->pose = goal_pose;
     ft_server_->publish_feedback(feedback);
 
-    nav_msgs::msg::Path path = planner_->createPlan(start_pose, goal_pose);
+    nav_msgs::msg::Path path = planner_->createPlan(start_pose, goal_pose, [this]() { return ft_server_->is_cancel_requested(); });
     if (!path.poses.empty()) {
       // Smooth the plan
       bool smooth_success = false;

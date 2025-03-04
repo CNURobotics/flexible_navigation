@@ -386,7 +386,7 @@ void FollowPath::execute()
     feedback->pose = goal_pose_map;
     fp_server_->publish_feedback(feedback);
 
-    nav_msgs::msg::Path path = planner_->createPlan(current_pose_map, goal_pose_map);
+    nav_msgs::msg::Path path = planner_->createPlan(current_pose_map, goal_pose_map, [this]() { return fp_server_->is_cancel_requested(); });
     if (!path.poses.empty()) {
       bool smooth_success = false;
       if (smoother_) {

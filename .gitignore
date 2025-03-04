@@ -217,3 +217,4 @@ CTestTestfile.cmake
 *tmp.py
 !flex_nav_controllers/bin/
 *flexbe_config.json
+.vscode

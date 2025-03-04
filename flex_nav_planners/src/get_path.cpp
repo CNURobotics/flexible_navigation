@@ -279,7 +279,7 @@ void GetPath::execute()
 
 
   // Create a plan from the current robot position to given goal
-  nav_msgs::msg::Path path = planner_->createPlan(start_pose, goal->pose);
+  nav_msgs::msg::Path path = planner_->createPlan(start_pose, goal->pose, [this]() { return gp_server_->is_cancel_requested(); });
   if (!path.poses.empty()) {
     if (path.header.frame_id == "") {
       RCLCPP_WARN(get_logger(), "Path frame id is empty");
