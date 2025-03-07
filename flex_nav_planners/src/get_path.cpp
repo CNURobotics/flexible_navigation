@@ -285,9 +285,16 @@ void GetPath::execute()
       RCLCPP_WARN(get_logger(), "Path frame id is empty");
     }
 
+    if (set_orientation_ && path.poses.size() > 2) {
+        // If using simple 2D planner with default orientation, set orientations along path based on average change
+        if (fabs(path.poses[1].pose.orientation.w - 1.0) < 1.e-6) {
+            setPathOrientations(path.poses);
+        }
+    }
+
     // Smooth the plan
-     bool smooth_success = false;
-    if (smoother_) {
+    bool smooth_success = false;
+    if (smoother_ && path.poses.size() > 1) {
       try {
         smooth_success = smoother_->smooth(path, costmap_ros_->getCostmap());
       } catch (std::runtime_error& e) {
@@ -302,13 +309,6 @@ void GetPath::execute()
       }
     }
 
-    // If using simple 2D planner, set orientations along path based on average change
-    if (set_orientation_ && !smooth_success) {
-      if (path.poses.size() > 2 && fabs(path.poses[1].pose.orientation.w - 1.0) < 1.e-6) {
-        RCLCPP_DEBUG(get_logger(), "Setting orientations along path");
-        setPathOrientations(path.poses);
-      }
-    }
     result->plan = path;
     result->code = flex_nav_common::action::GetPath::Result::SUCCESS;
     plan_publisher_->publish(std::move(path));
