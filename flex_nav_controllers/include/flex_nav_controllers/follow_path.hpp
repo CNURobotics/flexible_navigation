@@ -149,8 +149,9 @@ private:
   void setPlannerPath(const nav_msgs::msg::Path & path);
   /**
      * @brief Calculates velocity and publishes to "cmd_vel" topic
+     * @param pose current pose of the robot
      */
-  void computeAndPublishVelocity();
+  void computeAndPublishVelocity(geometry_msgs::msg::PoseStamped & pose);
   /**
      * @brief Calls setPlannerPath method with an updated path received from
      * action server
@@ -168,9 +169,10 @@ private:
   void publishZeroVelocity();
   /**
      * @brief Checks if goal is reached
+     * @param pose current pose of the robot
      * @return true or false
      */
-  bool isGoalReached();
+  bool isGoalReached(const geometry_msgs::msg::PoseStamped & pose);
   /**
      * @brief Obtain current pose of the robot
      * @param pose To store current pose of the robot

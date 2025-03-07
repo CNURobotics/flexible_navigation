@@ -32,6 +32,9 @@
 //       POSSIBILITY OF SUCH DAMAGE.
 
 
+#include <cmath>
+#include "angles/angles.h"
+
 #include <exception>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -286,7 +289,7 @@ void FollowPath::publishZeroVelocity()
   velocity.header.frame_id = costmap_ros_->getBaseFrameID();
   velocity.header.stamp = now();
 
-  if (vel_publisher_name_ != "") {
+  if (vel_publisher_name_ != "" || vel_stamp_publisher_name_ == "") {
     vel_publisher_->publish(velocity.twist);
   }
 
@@ -294,9 +297,6 @@ void FollowPath::publishZeroVelocity()
     vel_stamp_publisher_->publish(velocity);
   }
 
-  if (vel_publisher_name_ == "" && vel_stamp_publisher_name_ == "") {
-    vel_publisher_->publish(velocity.twist);
-  }
 }
 
 void FollowPath::setPlannerPath(const nav_msgs::msg::Path & path)
@@ -316,18 +316,13 @@ void FollowPath::setPlannerPath(const nav_msgs::msg::Path & path)
   goal_checker_->reset();
 
   RCLCPP_DEBUG(
-    get_logger(), "Path end point is (%.2f, %.2f)", end_pose.pose.position.x,
+    get_logger(), "Path end point is (%.3f, %.3f)", end_pose.pose.position.x,
     end_pose.pose.position.y);
   end_pose_ = end_pose.pose;
 }
 
-void FollowPath::computeAndPublishVelocity()
+void FollowPath::computeAndPublishVelocity(geometry_msgs::msg::PoseStamped& pose)
 {
-  geometry_msgs::msg::PoseStamped pose;
-
-  if (!getRobotPose(pose)) {
-    throw nav2_core::ControllerException("Failed to obtain robot pose");
-  }
 
   if (!progress_checker_->check(pose)) {
     throw nav2_core::ControllerException("Failed to make progress");
@@ -337,6 +332,9 @@ void FollowPath::computeAndPublishVelocity()
 
   auto cmd_vel_2d = controller_->computeVelocityCommands(
     pose, nav_2d_utils::twist2Dto3D(twist), goal_checker_.get());
+  // Update header info
+  cmd_vel_2d.header.frame_id = costmap_ros_->getBaseFrameID();
+  cmd_vel_2d.header.stamp = now();
 
   publishVelocity(cmd_vel_2d, pose);
 }
@@ -354,6 +352,7 @@ void FollowPath::updateGlobalPath()
 void FollowPath::publishVelocity(
   const geometry_msgs::msg::TwistStamped & velocity, geometry_msgs::msg::PoseStamped robotPose)
 {
+
   if (vel_stamp_publisher_name_ != "") {
     if (
       vel_stamp_publisher_->is_activated() &&
@@ -380,14 +379,8 @@ void FollowPath::publishVelocity(
   fp_server_->publish_feedback(feedback);
 }
 
-bool FollowPath::isGoalReached()
+bool FollowPath::isGoalReached(const geometry_msgs::msg::PoseStamped & pose)
 {
-  geometry_msgs::msg::PoseStamped pose;
-
-  if (!getRobotPose(pose)) {
-    return false;
-  }
-
   nav_2d_msgs::msg::Twist2D twist = odom_sub_->getTwist();
   geometry_msgs::msg::Twist velocity = nav_2d_utils::twist2Dto3D(twist);
   return goal_checker_->isGoalReached(pose.pose, end_pose_, velocity);
@@ -468,9 +461,14 @@ void FollowPath::execute()
 
       updateGlobalPath();
 
-      computeAndPublishVelocity();
+      geometry_msgs::msg::PoseStamped pose;
 
-      if (isGoalReached()) {
+      if (!getRobotPose(pose)) {
+        RCLCPP_INFO(get_logger(), "[%s] failed to get pose - cannot check isGoalReached!", name_.c_str());
+        throw nav2_core::ControllerException("Failed to get current robot pose");
+      }
+
+      if (isGoalReached(pose)) {
         RCLCPP_INFO(get_logger(), "[%s] Success!", name_.c_str());
         std::shared_ptr<flex_nav_common::action::FollowPath::Result> result =
           std::make_shared<flex_nav_common::action::FollowPath::Result>();
@@ -483,8 +481,10 @@ void FollowPath::execute()
         running_ = false;
 
         publishZeroVelocity();
-        break;
+        return;
       }
+
+      computeAndPublishVelocity(pose);
 
       if (!r.sleep()) {
         RCLCPP_WARN(
